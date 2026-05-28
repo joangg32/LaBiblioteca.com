@@ -1,297 +1,381 @@
+// ============================================================================
+// IMPORTACIONES
+// ============================================================================
+// Three.js:
+//  - RGBELoader: cargador para imágenes HDR (.hdr) de alto rango dinámico, solo haría falta si la panorámica fuese .hdr o .exr
+//  - RenderPass: dibuja la escena tal cual.
+//  - ShaderPass: aplica un shader (GLSL) de pixeles para mantener la estética pixel art.
+//  - EffectComposer: encadena las dos capas.
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
+// ============================================================================
+// CONSTANTES DE CONFIGURACIÓN
+// ============================================================================
+// Ruta a la imagen panorámica .png.
 const ENVIRONMENT_PATH = './assets/panoramica-2.png';
+// Tamaño del pixel del shader pixelado.
 const PIXEL_SIZE = 6;
 
+// ============================================================================
+// ESCENA, CÁMARA Y RENDERER
+// ============================================================================
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  60,
-  window.innerWidth / window.innerHeight,
-  0.1,
+  60, // fov: campo de visión vertical en grados (60 = visión humana aprox).
+  window.innerWidth / window.innerHeight, // aspect: relación ancho/alto de la ventana.
+  0.1, // near/far: planos de recorte; nada más cerca de 0.1 ni más lejos de 100
   100
 );
+// Posición inicial de la cámara
 camera.position.set(0, 1, 2);
 
+
+// antialias suaviza los bordes dentados.
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+// El canvas ocupa toda la ventana.
 renderer.setSize(window.innerWidth, window.innerHeight);
+// Tonemapping: convierte colores HDR (con valores >1) a SDR (0-1).
+// ACESFilmic es un estándar de cine que da contrastes agradables.
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.5;
+// Inserta el canvas generado dentro del body del index.
 document.body.appendChild(renderer.domElement);
 
-// Mirar alrededor solo al arrastrar con el ratón (click + mover).
+// ============================================================================
+// CONTROLES DE CÁMARA: MIRAR ALREDEDOR CON EL RATÓN (DRAG)
+// ============================================================================
+// Orden de rotación 'YXZ': giro horizontal (Y = yaw),giro vertical (X = pitch)
+// Evita el bloqueo de cardan (cuando dos de los tres ejes están en paralelo) haciendo que la escena no se moveria libremente.
 camera.rotation.order = 'YXZ';
-const LOOK_SPEED = 0.0025;
+// Sensibilidad del ratón (radianes por píxel arrastrado).
+const LOOK_SPEED = 0.001;
+// Límite vertical: casi 90° arriba/abajo, sin llegar al cenit para que no gire.
 const PITCH_LIMIT = Math.PI / 2 - 0.01;
+// Estado incial.
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
 
+// Al pulsar el botón del ratón, empieza el arrastre y guarda la posición.
 renderer.domElement.addEventListener('mousedown', (e) => {
   dragging = true;
   lastX = e.clientX;
   lastY = e.clientY;
-  renderer.domElement.style.cursor = 'grabbing';
 });
+// Al soltar el botón del ratón deja de arrastrar.
 window.addEventListener('mouseup', () => {
   dragging = false;
-  renderer.domElement.style.cursor = 'grab';
 });
+// Al mover el ratón mientras se arrastra, gira la cámara proporcionalmente.
 window.addEventListener('mousemove', (e) => {
   if (!dragging) return;
+  // dx/dy = cuánto se ha movido el ratón desde el último frame.
   const dx = e.clientX - lastX;
   const dy = e.clientY - lastY;
   lastX = e.clientX;
   lastY = e.clientY;
-  camera.rotation.y -= dx * LOOK_SPEED;
+  // Yaw (giro horizontal): sumamos para sensación de "arrastre": al mover el
+  // ratón a la derecha la escena se va a la derecha (la cámara mira a la izq).
+  camera.rotation.y += dx * LOOK_SPEED;
+  // Pitch (giro vertical): igual, sumamos para arrastrar. Clamp para no
+  // voltear la cámara más allá del cenit/nadir.
   camera.rotation.x = THREE.MathUtils.clamp(
-    camera.rotation.x - dy * LOOK_SPEED,
+    camera.rotation.x + dy * LOOK_SPEED,
     -PITCH_LIMIT,
     PITCH_LIMIT
   );
 });
-renderer.domElement.style.cursor = 'grab';
 
-const keys = { w: false, a: false, s: false, d: false, shift: false, space: false, c: false };
+// ============================================================================
+// CURSOR PERSONALIZADO (IMÁGENES DE ASSETS)
+// ============================================================================
+// Sustituye el cursor por una imagen que sigue al ratón.
+// 3 estados: normal, sobre punto interactivo, y "rock" (cuando está inactivo varios segundos, como un guiño).
+const cursorEl = document.getElementById('cursor');
+const CURSOR_SRC = {
+  regular: './assets/mouse-regular.png',
+  pointer: './assets/mouse-pointer.png',
+  rock: './assets/mouse-rock.png',
+};
+
+let cursorBase = 'regular';// cursor que debería mostrarse según el contexto (regular o pointer).
+let idleTimer = null;// Tiempo actual con el cursor parado
+const IDLE_MS = 2500;// Tiempo parado para mostrar el cursor "rock"
+
+// Cambia la imagen del cursor falso.
+function setCursorImage(name) {
+  cursorEl.src = CURSOR_SRC[name];
+}
+
+// Mostrar el cursor falso y moverlo a la posición del ratón.
+function onCursorActivity(e) {
+  cursorEl.style.display = 'block';
+  cursorEl.style.left = `${e.clientX}px`;
+  cursorEl.style.top = `${e.clientY}px`;
+  setCursorImage(cursorBase);
+  clearTimeout(idleTimer);
+  // si no hay actividad durante IDLE_MS se muestra mostrar "rock".
+  idleTimer = setTimeout(() => {
+    if (cursorBase === 'regular') setCursorImage('rock');
+  }, IDLE_MS);
+}
+// Eventos que resetean la cuenta (mover y clicar)
+window.addEventListener('mousemove', onCursorActivity);
+window.addEventListener('mousedown', onCursorActivity);
+// Si el ratón sale de la página, se oculta el cursor falso.
+document.addEventListener('mouseleave', () => {
+  cursorEl.style.display = 'none';
+  clearTimeout(idleTimer);
+});
+
+// ============================================================================
+// TECLADO: ESTADO DE LAS TECLAS DE MOVIMIENTO
+// ============================================================================
+// Se guarda qué teclas están pulsadas AHORA mismo (se crea bucle para hcer movimiento más suave)
+const keys = {
+  w: false,
+  a: false,
+  s: false,
+  d: false,
+};
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k in keys) keys[k] = true;
-  if (e.code === 'Space') keys.space = true;
-  if (e.key === 'Shift') keys.shift = true;
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
   if (k in keys) keys[k] = false;
-  if (e.code === 'Space') keys.space = false;
-  if (e.key === 'Shift') keys.shift = false;
 });
 
-const MIN_FOV = 15;
-const MAX_FOV = 90;
+// ============================================================================
+// ZOOM CON RUEDA DEL RATÓN (modifica el FOV)
+// ============================================================================
+const MIN_FOV = 30;  // máximo zoom in
+const MAX_FOV = 80;  // máximo zoom out
 renderer.domElement.addEventListener('wheel', (event) => {
+  // Para que la página haga scroll mientras se hace zoom en el canvas.
   event.preventDefault();
+  // deltaY positivo para que rueda hacia abajo = alejar (más FOV).
   camera.fov = THREE.MathUtils.clamp(
     camera.fov + event.deltaY * 0.05,
     MIN_FOV,
     MAX_FOV
   );
+  // Cuando se cambia el el fov hay que recalcular la proyección.
   camera.updateProjectionMatrix();
-}, { passive: false });
+}, { passive: false }); // passive:false permite usar preventDefault().
 
-const ROOM_RADIUS = 15;
-const roomGeometry = new THREE.SphereGeometry(ROOM_RADIUS, 64, 64);
+// ============================================================================
+// ESFERA DE LA SALA (skybox esférico)
+// ============================================================================
+// Se usa una esfera grande con una panorámica mapeada por DENTRO.
+// side: BackSide hace que se vean las caras interiores en vez de las exteriores.
+const ROOM_RADIUS = 25;
+const roomGeometry = new THREE.SphereGeometry(ROOM_RADIUS, 64, 64); // 64 segmentos = esfera suave.
 const roomMaterial = new THREE.MeshBasicMaterial({ side: THREE.BackSide });
 const roomMesh = new THREE.Mesh(roomGeometry, roomMaterial);
 scene.add(roomMesh);
 
+// Carga la textura panorámica. Detecta automáticamente si es HDR.
 function loadEnvironment(path) {
+  // Si el archivo es .hdr o .exr, usar RGBELoader; si no, TextureLoader normal.
   const isHDR = /\.(hdr|exr)$/i.test(path);
   const loader = isHDR ? new RGBELoader() : new THREE.TextureLoader();
 
   loader.load(path, (texture) => {
+    // Para PNG/JPG hay que indicar el espacio de color sRGB para que se vea
+    // con los colores correctos. HDR ya viene en espacio lineal.
     if (!isHDR) {
       texture.colorSpace = THREE.SRGBColorSpace;
     }
+    // Se gira horizontalmente la textura (repeat.x = -1)
+    // offset de 1 para que quede bien orientada
     texture.wrapS = THREE.RepeatWrapping;
     texture.repeat.x = -1;
     texture.offset.x = 1;
-    roomMaterial.map = texture;
-    roomMaterial.needsUpdate = true;
+    roomMaterial.map = texture; // poner textura
+    roomMaterial.needsUpdate = true; //avisar de que se ha cambiado algo y hay que recompilar el shader
 
-    const envTexture = texture.clone();
-    envTexture.mapping = THREE.EquirectangularReflectionMapping;
-    envTexture.repeat.set(1, 1);
-    envTexture.offset.set(0, 0);
-    envTexture.needsUpdate = true;
-    scene.environment = envTexture;
+    // // IBL Image-Based Lighting: Simular como se refleja e ilumina el entorno (para objetos metálicos en la escena)
+    // const envTexture = texture.clone(); // se clona para que los cambios no afecten a la principal
+    // envTexture.mapping = THREE.EquirectangularReflectionMapping; //Indica que es una textura equirectangular.
+    // envTexture.repeat.set(1, 1); // Resetea el flip horizontal del original ya que al hacer los reflejos en equirectangular la imagen se orienta correctamente.
+    // envTexture.offset.set(0, 0);
+    // envTexture.needsUpdate = true; //avisar de que se ha cambiado algo y hay que recompilar el shader
+    // scene.environment = envTexture;
   });
 }
 
 loadEnvironment(ENVIRONMENT_PATH);
 
-// ---------------------------------------------------------------------------
-// Puntos de interacción
-// ---------------------------------------------------------------------------
-// Cada punto se coloca con un ángulo de orientación (yaw) y elevación (pitch)
-// en grados. Ajusta estos valores para situar el punto exactamente sobre el
-// elemento correspondiente del panorama.
-//   yaw   = 0 mira al frente, valores negativos a la izquierda.
-//   pitch = 0 a la altura de los ojos, negativo hacia abajo (mesas).
+// ============================================================================
+// PUNTOS DE INTERACCIÓN (HOTSPOTS)
+// ============================================================================
+// Cada punto se coloca con un ángulo (yaw) y elevación (pitch) en grados.
+// yaw = 0 mira al frente, valores negativos a la izquierda.
+// pitch = 0 a la altura de los ojos, negativo hacia abajo (mesas).
 const HOTSPOTS = [
-  { name: 'Arcade', image: './assets/menu-arcade.png',     yawDeg: -180, pitchDeg: 15 }, // mesa de los ordenadores
-  { name: 'Ordenadores', image: './assets/menu-pc.png',  yawDeg: -15, pitchDeg: -12 }, // mesa con el radiocassete
-  { name: 'Espejo',       image: './assets/menu-mirror.png', yawDeg:  75, pitchDeg:   0 }, // zona del espejo
-  { name: 'Radio',       image: './assets/menu-table.png', yawDeg: 160, pitchDeg:  -30 }, // otra parte de la sala
+  { name: 'Arcade',      image: './assets/menu-arcade.png', yawDeg: -180, pitchDeg:  15 },
+  { name: 'Ordenadores', image: './assets/menu-pc.png',     yawDeg:  -15, pitchDeg: -12 },
+  { name: 'Espejo',      image: './assets/menu-mirror.png', yawDeg:   75, pitchDeg:   0 },
+  { name: 'Radio',       image: './assets/menu-table.png',  yawDeg:  160, pitchDeg: -30 },
 ];
 
+// Distancia de los hotspots al orde de la esfera.
 const HOTSPOT_DISTANCE = ROOM_RADIUS - 4;
 
-// Textura circular generada por canvas para el marcador.
-function makeMarkerTexture() {
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const c = size / 2;
-  ctx.beginPath();
-  ctx.arc(c, c, c * 0.85, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(251,255,190,0.85)';
-  ctx.fill();
-  ctx.lineWidth = size * 0.08;
-  ctx.strokeStyle = 'rgba(34,82,227,0.95)';
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(c, c, c * 0.35, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(34,82,227,0.95)';
-  ctx.fill();
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+// Contenedor en el DOM donde se irán insertando los botones de hotspot.
+const hotspotsEl = document.getElementById('hotspots');
 
-const markerTexture = makeMarkerTexture();
-const hotspotSprites = [];
-
+// Por cada hotspot se crea un <button> en el HTML y se guarda su posición 3D.
+// La estética y la animación de hover viven en styles.css.
 for (const spot of HOTSPOTS) {
-  const yaw = THREE.MathUtils.degToRad(spot.yawDeg);
-  const pitch = THREE.MathUtils.degToRad(spot.pitchDeg);
-  const dir = new THREE.Vector3(
-    Math.sin(yaw) * Math.cos(pitch),
-    Math.sin(pitch),
-    -Math.cos(yaw) * Math.cos(pitch)
-  );
+  // Grados a radianes (Three.js usa radianes).
+  const yaw = THREE.MathUtils.degToRad(spot.yawDeg); // giro horizontal
+  const pitch = THREE.MathUtils.degToRad(spot.pitchDeg); // giro vertical
+  // Coordenadas esféricas (2 puntos) a cartesianas (3 puntos)
+  spot.worldPos = new THREE.Vector3(
+    Math.sin(yaw) * Math.cos(pitch), // cuanto a los lados
+    Math.sin(pitch), // cuanto arriba y abajo
+    -Math.cos(yaw) * Math.cos(pitch)// cuanto delante y detrás
+  ).multiplyScalar(HOTSPOT_DISTANCE); // distancia a la que se tiene que multiplicar las coordenadas de los hotspots
 
-  const material = new THREE.SpriteMaterial({
-    map: markerTexture,
-    depthTest: false,
-    depthWrite: false,
-    transparent: true,
+  const el = document.createElement('button');
+  el.className = 'hotspot';
+  el.setAttribute('aria-label', spot.name);
+  // Hover: cambiar cursor a pointer y mostrar el tooltip.
+  el.addEventListener('mouseenter', () => {
+    cursorBase = 'pointer';
+    setCursorImage('pointer');
+    tip.textContent = `▶   Ver ${spot.name}`;
+    tip.classList.add('visible');
   });
-  const sprite = new THREE.Sprite(material);
-  sprite.position.copy(dir.multiplyScalar(HOTSPOT_DISTANCE));
-  sprite.scale.set(0.8, 0.8, 0.8);
-  sprite.renderOrder = 999;
-  sprite.userData.hotspot = spot;
-  scene.add(sprite);
-  hotspotSprites.push(sprite);
+  el.addEventListener('mousemove', (e) => {
+    // El tip está junto al ratón mientras está sobre el hotspot.
+    tip.style.left = `${e.clientX}px`;
+    tip.style.top = `${e.clientY}px`;
+  });
+  el.addEventListener('mouseleave', () => {
+    cursorBase = 'regular';
+    tip.classList.remove('visible');
+  });
+  // Clic: abrir el menú correspondiente (con fundido).
+  el.addEventListener('click', () => {
+    if (transitioning || menuOpen) return;
+    tip.classList.remove('visible');
+    withFade(() => openMenu(spot));
+  });
+  hotspotsEl.appendChild(el);
+  spot.el = el;
 }
 
-// Overlay del menú (solo botón de cierre; la imagen se dibuja en el canvas).
+// ============================================================================
+// OVERLAY DEL MENÚ
+// ============================================================================
+// Referencias a los elementos del HTML que vamos a manipular.
 const menuOverlay = document.getElementById('menu-overlay');
 const menuClose = document.getElementById('menu-close');
 const tip = document.getElementById('hotspot-tip');
 const fadeEl = document.getElementById('fade');
+const moveControls = document.getElementById('move-controls');
 
-// Ejecuta un cambio (abrir/cerrar menú) con un fundido a negro para
-// suavizar el salto entre el HDRI y el menú plano.
+// Botones W/A/S/D en pantalla: al pulsarlos, marcan keys[key]=true como si
+// se hubiera pulsado la tecla, así reutilizamos toda la lógica de teclado.
+const moveButtons = {};
+for (const btn of moveControls.querySelectorAll('.move-btn')) {
+  const key = btn.dataset.key; // dataset.key viene del atributo data-key="..."
+  moveButtons[key] = btn; // todas las key se trataran como un boton dentro de movebuttons (animación)
+
+  const press = (e) => {
+    e.preventDefault();
+    keys[key] = true; // cuando cada usa se pulsa, cambia el estado a verdadero y se activa la clase
+    btn.classList.add('pressed');
+  };
+  const release = () => {
+    keys[key] = false;
+    btn.classList.remove('pressed');
+  };
+  // pointerdown/up cubre ratón Y dedo en móvil con un solo evento.
+  btn.addEventListener('pointerdown', press);
+  btn.addEventListener('pointerup', release);
+  // pointerleave/cancel evitan que se quede "atascado" pulsado.
+  btn.addEventListener('pointerleave', release);
+  btn.addEventListener('pointercancel', release);
+}
+
+// Sincronización a la inversa: al pulsar la tecla física, también se "ilumina" el botón.
+window.addEventListener('keydown', (e) => {
+  const btn = moveButtons[e.key.toLowerCase()];
+  if (btn) btn.classList.add('pressed');
+});
+window.addEventListener('keyup', (e) => {
+  const btn = moveButtons[e.key.toLowerCase()];
+  if (btn) btn.classList.remove('pressed');
+});
+
+// ----------------------------------------------------------------------------
+// Transición con fundido a negro al abrir/cerrar menús.
+// ----------------------------------------------------------------------------
 let transitioning = false;
 function withFade(action) {
-  if (transitioning) return;
+  if (transitioning) return; // evitar encadenar transiciones.
   transitioning = true;
-  fadeEl.classList.add('on');
+  fadeEl.classList.add('on'); // 260ms a negro (definido en el CSS).
   setTimeout(() => {
     action();
     fadeEl.classList.remove('on');
-    setTimeout(() => { transitioning = false; }, 260);
+    setTimeout(() => { transitioning = false; }, 260); // 260ms volviendo.
   }, 260);
 }
 
+// ============================================================================
+// LÓGICA DE APERTURA / CIERRE DE MENÚS
+// ============================================================================
 let menuOpen = false;
 const textureLoader = new THREE.TextureLoader();
-const textureCache = new Map();
-
-function getMenuTexture(path) {
-  if (textureCache.has(path)) return textureCache.get(path);
-  const tex = textureLoader.load(path, () => fitMenuPlane());
-  tex.colorSpace = THREE.SRGBColorSpace;
-  textureCache.set(path, tex);
-  return tex;
-}
 
 function openMenu(spot) {
-  menuMaterial.map = getMenuTexture(spot.image);
+  // Se carga la imagen del menú y la asigna al plano de la escena del menú.
+  // El callback ajusta el plano al aspecto cuando termina la descarga.
+  const tex = textureLoader.load(spot.image, () => fitMenuPlane());
+  tex.colorSpace = THREE.SRGBColorSpace;
+  menuMaterial.map = tex;
   menuMaterial.needsUpdate = true;
   fitMenuPlane();
   menuOpen = true;
-  menuOverlay.classList.add('visible');
+  menuOverlay.classList.add('visible'); // muestra el botón cerrar (×).
+  moveControls.classList.add('hidden'); // oculta los W/A/S/D.
 }
 function closeMenu() {
   menuOpen = false;
   menuOverlay.classList.remove('visible');
+  moveControls.classList.remove('hidden');
 }
-menuClose.addEventListener('click', () => withFade(closeMenu));
-menuOverlay.addEventListener('click', (e) => {
-  if (e.target === menuOverlay) withFade(closeMenu);
-});
-window.addEventListener('keydown', (e) => {
+// 2 formas de cerrar el menú:
+menuClose.addEventListener('click', () => withFade(closeMenu)); // botón ×
+window.addEventListener('keydown', (e) => { // ESC
   if (e.key === 'Escape' && menuOpen) withFade(closeMenu);
 });
 
-// Raycaster para detectar clics sobre los puntos (diferenciando de arrastrar).
-const raycaster = new THREE.Raycaster();
-raycaster.params.Sprite = { threshold: 0 };
-const pointer = new THREE.Vector2();
-let downX = 0;
-let downY = 0;
-let downTime = 0;
-
-renderer.domElement.addEventListener('mousedown', (e) => {
-  downX = e.clientX;
-  downY = e.clientY;
-  downTime = performance.now();
-});
-
-renderer.domElement.addEventListener('mouseup', (e) => {
-  const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
-  const elapsed = performance.now() - downTime;
-  if (moved > 6 || elapsed > 350) return; // fue un arrastre, no un clic
-
-  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObjects(hotspotSprites, false);
-  if (hits.length > 0) {
-    const spot = hits[0].object.userData.hotspot;
-    tip.classList.remove('visible');
-    withFade(() => openMenu(spot));
-  }
-});
-
-// Hover sobre un punto: cambia el cursor y muestra una nota indicando
-// que ese punto abre un menú.
-renderer.domElement.addEventListener('mousemove', (e) => {
-  if (dragging || menuOpen || transitioning) {
-    tip.classList.remove('visible');
-    return;
-  }
-  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObjects(hotspotSprites, false);
-  if (hits.length > 0) {
-    const spot = hits[0].object.userData.hotspot;
-    renderer.domElement.style.cursor = 'pointer';
-    tip.textContent = `▶ ${spot.name} · abrir menú`;
-    tip.style.left = `${e.clientX}px`;
-    tip.style.top = `${e.clientY}px`;
-    tip.classList.add('visible');
-  } else {
-    renderer.domElement.style.cursor = 'grab';
-    tip.classList.remove('visible');
-  }
-});
+// ============================================================================
+// SHADER DE PIXELADO + PALETA DE 4 COLORES
+// ============================================================================
+// Shader GLSL personalizado:
+//   1) Reduce la resolución muestreando bloques de PIXEL_SIZE x PIXEL_SIZE (efecto pixel-art).
+//   2) Reasigna los colores a una paleta de 4 tonos según la luz.
 
 const PixelPaletteShader = {
+  // Uniforms = variables que pasamos desde JS al shader cada frame.
   uniforms: {
-    tDiffuse: { value: null },
+    tDiffuse: { value: null }, // la imagen ya renderizada por el pase anterior.
     resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
     pixelSize: { value: PIXEL_SIZE },
   },
+  // Vertex shader pasa las coordenadas UV al fragment shader.
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() {
@@ -299,6 +383,7 @@ const PixelPaletteShader = {
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
+  // Fragment shader: se ejecuta para CADA píxel de la imagen final.
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform vec2 resolution;
@@ -306,20 +391,26 @@ const PixelPaletteShader = {
     varying vec2 vUv;
 
     void main() {
+      // 1) PIXELADO: "engancha" cada fragmento al centro de un bloque NxN.
       vec2 dxy = pixelSize / resolution;
       vec2 coord = dxy * floor(vUv / dxy) + dxy * 0.5;
       vec3 color = texture2D(tDiffuse, coord).rgb;
 
+      // 2) PALETA: 4 colores predefinidos (negro, azul, verde, amarillo).
       vec3 c0 = vec3(0.0, 0.0, 0.0);
       vec3 c1 = vec3(34.0, 82.0, 227.0) / 255.0;
       vec3 c2 = vec3(153.0, 211.0, 151.0) / 255.0;
       vec3 c3 = vec3(251.0, 255.0, 190.0) / 255.0;
 
+      // Luminancia perceptual (cuánto "brillo" tiene el color original).
       float lum = dot(color, vec3(0.299, 0.587, 0.114));
+      // Umbrales para repartir el rango de luminancia entre los 4 colores.
       float t0 = 0.12;
       float t1 = 0.35;
       float t2 = 0.65;
 
+      // Según el brillo, mezclamos entre los pares de colores adyacentes para
+      // obtener un gradiente cuantizado pero sin escalones bruscos.
       vec3 palette;
       if (lum < t0) {
         palette = mix(c0, c1, lum / t0);
@@ -331,7 +422,9 @@ const PixelPaletteShader = {
         palette = c3;
       }
 
-      float paletteStrength = 0.4;
+      // Mezcla del color original con la paleta: 0.4 = 40% paleta, 60% original.
+      // Sube este valor para una estética más "retro pura".
+      float paletteStrength = 0.45;
       vec3 result = mix(color, palette, paletteStrength);
 
       gl_FragColor = vec4(result, 1.0);
@@ -339,88 +432,130 @@ const PixelPaletteShader = {
   `,
 };
 
+// EffectComposer que encadena pases en orden.
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new RenderPass(scene, camera)); // renderiza la escena.
 const pixelPass = new ShaderPass(PixelPaletteShader);
-composer.addPass(pixelPass);
+composer.addPass(pixelPass); // aplica el shader.
 
-// Escena aparte para mostrar la imagen del menú a pantalla completa,
-// renderizada por el MISMO shader de píxeles/paleta que el fondo.
+// ============================================================================
+// ESCENA APARTE PARA EL MENÚ (con el mismo shader pixel/paleta)
+// ============================================================================
+// Pintamos el menu en una escena Three.js con cámara ortográfica para poder pasarla por el shader.
 const menuScene = new THREE.Scene();
+// OrthographicCamera(left, right, top, bottom, near, far) para proyección plana.
+// Con (-1,1,1,-1) cubre exactamente un cuadrado de 2x2 (cordenadas de -1 a +1).
 const menuCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
 menuCamera.position.z = 1;
 const menuMaterial = new THREE.MeshBasicMaterial({ transparent: false });
+// Plano 2x2 que ocupa toda la cámara ortográfica.
 const menuPlane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), menuMaterial);
 menuScene.add(menuPlane);
 
+// Pipeline aparte para el menú con el mismo shader que el anterior.
 const menuComposer = new EffectComposer(renderer);
 menuComposer.addPass(new RenderPass(menuScene, menuCamera));
 const menuPixelPass = new ShaderPass(PixelPaletteShader);
 menuComposer.addPass(menuPixelPass);
 
-// Escala el plano para que la imagen cubra toda la pantalla (modo "cover").
+// ----------------------------------------------------------------------------
+// Escala el plano para que la imagen cubra toda la pantalla
+// ----------------------------------------------------------------------------
 function fitMenuPlane() {
   const tex = menuMaterial.map;
   if (!tex || !tex.image) return;
   const screenAspect = window.innerWidth / window.innerHeight;
   const imgAspect = tex.image.width / tex.image.height;
   if (imgAspect > screenAspect) {
+    // Si la imagen es más ancha que la pantalla se estira horizontalmente.
     menuPlane.scale.set(imgAspect / screenAspect, 1, 1);
   } else {
+    // Si la imagen es más alta que la pantalla se estira verticalmente.
     menuPlane.scale.set(1, screenAspect / imgAspect, 1);
   }
 }
 
+// ============================================================================
+// REDIMENSIONADO DE LA VENTANA
+// ============================================================================
+// Cuando cambia el tamaño de la ventana, hay que actualizar todo lo que
+// depende de las dimensiones.
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
   menuComposer.setSize(window.innerWidth, window.innerHeight);
+  // El shader también necesita la nueva resolución para pixelar bien.
   pixelPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
   menuPixelPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
   fitMenuPlane();
 });
 
-const MOVE_SPEED = 0.08;
-const VERTICAL_SPEED = 0.06;
-// Límites de movimiento: la panorámica está proyectada en una esfera y solo
-// se ve sin deformarse cerca del centro. Mantenemos la cámara dentro de un
-// radio pequeño (horizontal) y un rango de altura acotado.
+// ============================================================================
+// MOVIMIENTO DE LA CÁMARA Y BUCLE DE RENDER
+// ============================================================================
+const MOVE_SPEED = 0.08; // velocidad de WASD.
+// Radio máximo del cilindro de movimiento (en el plano horizontal).
 const MAX_RADIUS = 2.5;
-const MIN_Y = 0.4;
-const MAX_Y = 2.6;
 
-const forward = new THREE.Vector3();
-const right = new THREE.Vector3();
-
+// setAnimationLoop se llama una vez por frame (60 veces por segundo).
 renderer.setAnimationLoop(() => {
+  // Si hay un menú abierto, solo se dibuja la escena del menú y se sale.
   if (menuOpen) {
     menuComposer.render();
     return;
   }
 
-  const speed = MOVE_SPEED * (keys.shift ? 2.5 : 1);
-
+  // Vector "adelante" (sin Y para que no suba hacia arriba). normalize lo deja de longitud 1.
+  const forward = new THREE.Vector3();
   camera.getWorldDirection(forward);
   forward.y = 0;
   forward.normalize();
-  right.set(-forward.z, 0, forward.x);
+  
+  // Vector "derecha" perpendicular a "adelante" en el plano horizontal.
+  const right = new THREE.Vector3(-forward.z, 0, forward.x);
 
-  if (keys.w) camera.position.addScaledVector(forward, speed);
-  if (keys.s) camera.position.addScaledVector(forward, -speed);
-  if (keys.a) camera.position.addScaledVector(right, -speed);
-  if (keys.d) camera.position.addScaledVector(right, speed);
-  if (keys.space) camera.position.y += VERTICAL_SPEED;
-  if (keys.c) camera.position.y -= VERTICAL_SPEED;
+  if (keys.w) camera.position.addScaledVector(forward, MOVE_SPEED);
+  if (keys.s) camera.position.addScaledVector(forward, -MOVE_SPEED);
+  if (keys.a) camera.position.addScaledVector(right, -MOVE_SPEED);
+  if (keys.d) camera.position.addScaledVector(right, MOVE_SPEED);
 
+  // Limitar la posición a un círculo de radio MAX_RADIUS (en el plano X/Z) para no salirse
   const horiz = Math.hypot(camera.position.x, camera.position.z);
   if (horiz > MAX_RADIUS) {
     const s = MAX_RADIUS / horiz;
     camera.position.x *= s;
     camera.position.z *= s;
   }
-  camera.position.y = THREE.MathUtils.clamp(camera.position.y, MIN_Y, MAX_Y);
 
+  // Bloquear los hotspots si se está arrastrando, hay menú abierto o
+  // transición a negro: durante esos estados no deben recibir hover/click.
+  if (dragging || menuOpen || transitioning) {
+    hotspotsEl.classList.add('locked');
+  } else {
+    hotspotsEl.classList.remove('locked');
+  }
+
+  // Proyectar la posición 3D de cada hotspot a píxeles de pantalla y mover
+  // su <button> ahí. Si queda detrás de la cámara (z>1) lo ocultamos.
+  for (const spot of HOTSPOTS) {
+    const ndc = spot.worldPos.clone().project(camera);
+    if (ndc.z > 1) {
+      spot.el.classList.add('hidden');
+      continue;
+    }
+    spot.el.classList.remove('hidden');
+    // De NDC (-1..1) a píxeles de pantalla.
+    // La Y se invierte porque en pantalla crece hacia abajo.
+    const x = (ndc.x + 1) / 2 * window.innerWidth;
+    const y = (1 - ndc.y) / 2 * window.innerHeight;
+    spot.el.style.left = `${x}px`;
+    spot.el.style.top = `${y}px`;
+  }
+
+  // Render final: dibuja la escena pasando por el shader de pixel/paleta.
+  // Los hotspots viven en el DOM por encima del <canvas>,
+  // se muestran nítidos sin pasar por el shader.
   composer.render();
 });

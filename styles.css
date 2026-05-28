@@ -1,0 +1,224 @@
+/* ================================================================
+   RESET BÁSICO
+   ================================================================ */
+/* Sin márgenes ni padding por defecto, sin scroll y fondo negro:
+   la escena 3D ocupa toda la pantalla. */
+html, body { 
+   margin: 0;
+   padding: 0;
+   overflow: hidden;
+   background: #000; }
+
+/* Oculta el cursor en todos los elementos interactivos.
+El cursor visible es la imagen #cursor que mueve el script. */
+html, body, canvas, button, #menu-overlay { 
+   cursor: none; 
+}
+
+/* ================================================================
+   CURSOR PERSONALIZADO
+   ================================================================ */
+#cursor {
+  /* anclado a la ventana */
+   position: fixed;
+   left: 0;
+   top: 0;
+   width: 30px;
+   height: auto;
+   
+   /* para que no bloquee los clics que pasan a través. */
+   pointer-events: none;
+   z-index: 9999;
+   /* Oculto al inicio lo muestra el script */
+   display: none;
+}
+
+/* ================================================================
+   OVERLAY DEL MENÚ (capa que aparece al pulsar un hotspot)
+   ================================================================ */
+#menu-overlay {
+   /* inset: 0 para centrarlo */
+   position: absolute;
+   inset: 0;
+   /* Oculto al inicio lo muestra el script */
+   display: none;
+   /* Entre el cursor y la escena */
+   z-index: 10;
+}
+/* Cuando el script añade la clase visible, se muestra el overlay. */
+#menu-overlay.visible {
+   display: block;
+}
+
+/* Botón para cerrar el menú. (modificar con imagen por encima) */
+#menu-close {
+   position: absolute;
+   top: 18px;
+   right: 22px;
+
+   width: 40px;
+   height: 40px;
+
+   border: none;
+   border-radius: 50%;
+   background: rgba(255,255,255,0.9);
+   color: #000;
+
+   font-size: 22px;
+   line-height: 40px;
+   cursor: pointer;
+}
+
+#menu-close:hover { background: #fff; }
+
+/* ================================================================
+   HOTSPOTS (puntos de interacción)
+   El contenedor cubre toda la pantalla pero NO bloquea clics
+   (pointer-events: none). Sólo los hijos .hotspot reciben eventos.
+   Cuando hay drag, menú abierto o transición, .locked en el padre
+   desactiva todos los hotspots a la vez.
+   ================================================================ */
+#hotspots {
+   position: fixed;
+   inset: 0;
+   pointer-events: none;
+   /* Encima del canvas pero por debajo del menú (z=10) y del tip (z=15). */
+   z-index: 5;
+}
+#hotspots .hotspot {
+   pointer-events: auto;
+}
+#hotspots.locked .hotspot {
+   pointer-events: none;
+}
+
+.hotspot {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 24px;
+   height: 24px;
+   padding: 0;
+   border-radius: 50%;
+   /* Relleno gris claro, borde gris oscuro, punto central simulado con
+      box-shadow inset (un anillo interno del color del borde). */
+   background: rgba(200, 200, 200, 0.9);
+   border: 3px solid rgba(70, 70, 70, 0.95);
+   box-shadow: inset 0 0 0 4px rgba(200, 200, 200, 0.9),
+               inset 0 0 0 8px rgba(70, 70, 70, 0.95);
+   /* Anclamos por el centro y animamos la escala 0.25 s. */
+   transform: translate(-50%, -50%) scale(1);
+   transition: transform 0.25s ease;
+   cursor: none;
+}
+.hotspot:hover {
+   transform: translate(-50%, -50%) scale(1.5);
+}
+/* El script añade .hidden cuando el hotspot queda detrás de la cámara
+   o fuera del frustum, para evitar verlo "pegado" a un lateral. */
+.hotspot.hidden {
+   display: none;
+}
+
+/* ================================================================
+   TOOLTIP DE HOTSPOT (etiquetita junto al cursor)
+   ================================================================ */
+#hotspot-tip {
+   position: absolute;
+   left: 0;
+   top: 0;
+   /* desplazar la etiqueta para que no se tape por el cursor */
+   transform: translate(14px, -100%);
+   color: #fbffbe;
+   /* tipografía retro pixel 8-bit */
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 10px;
+   letter-spacing: 0.5px;
+   background: grey;
+   padding: 5px 10px;
+   border-radius: 4px;
+   pointer-events: none;
+   /* nowrap para que el texto se rompa en 2 líneas */
+   white-space: nowrap;
+   z-index: 15;
+   /* Invisible por defecto aparece con transición. */
+   opacity: 0;
+   transition: opacity 0.25s ease;
+}
+#hotspot-tip.visible { opacity: 1; }
+
+/* ================================================================
+   FUNDIDO A NEGRO (transición entre escena y menús)
+   ================================================================ */
+#fade {
+   position: absolute;
+   inset: 0;
+   background: #000;
+   /* Por defecto invisible y no bloquea los clics. */
+   opacity: 0;
+   pointer-events: none;
+   /* por encima del menú, para taparlo durante la transición. */
+   z-index: 20;
+   /* La transición debe coincidir con el setTimeout() del script. */
+   transition: opacity 0.26s ease;
+}
+/* Cuando el script añade la clase .on, la pantalla se pone en negro. */
+#fade.on { opacity: 1; }
+
+/* ================================================================
+   BOTONES DE MOVIMIENTO W/A/S/D EN PANTALLA
+   ================================================================ */
+#move-controls {
+   position: absolute;
+   right: 16px;
+   bottom: 16px;
+   z-index: 16;
+   /* Rejilla CSS 3 columnas de 52 px. El script coloca cada botón en su
+      celda con grid-column y grid-row inline. */
+   display: grid;
+   grid-template-columns: repeat(3, 52px);
+   gap: 6px;
+   /* para que no permita seleccionar el texto al hacer clic. */
+   user-select: none;
+   /* touch-action: none para que el (scroll, zoom) esté desactivado. */
+   touch-action: none;
+}
+/* Al abrir un menú, el script añade .hidden para ocultarlos. */
+#move-controls.hidden { display: none; }
+
+.move-btn {
+  /* La letra arriba y la imagen abajo. */
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: 3px;
+   /* Quitar el fondo y el borde de botón por defecto. */
+   background: none;
+   border: none;
+   padding: 0;
+   cursor: pointer;
+}
+
+.move-btn span {
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 12px;
+   font-weight: 400;
+}
+.move-btn img {
+   width: 46px;
+   height: 46px;
+   display: block;
+   /* Animacion para el efectode de pulsar. */
+   transition: transform 0.08s ease, filter 0.08s ease;
+}
+
+.move-btn img:hover {
+   filter: brightness(1.35)
+}
+
+/* :active para el estilo y .pressed que añade script para mover la camara */
+.move-btn:active img, .move-btn.pressed img {
+  /* Se encoge un poco y brilla más → feedback visual de pulsación. */
+   transform: scale(0.88); filter: brightness(1.35);
+}

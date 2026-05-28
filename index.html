@@ -1,58 +1,79 @@
 <!DOCTYPE html>
+<!-- idioma -->
 <html lang="es">
 <head>
+  <!-- UTF-8 permite acentos y símbolos como ×. -->
   <meta charset="UTF-8" />
+  <!--  página con ancho real del dispositivo. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Escena Three.js con HDRI</title>
-  <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
-    canvas { display: block; }
-    #info {
-      position: absolute; top: 10px; left: 10px;
-      color: #fff; font-family: system-ui, sans-serif; font-size: 13px;
-      background: rgba(0,0,0,0.4); padding: 6px 10px; border-radius: 4px;
-      pointer-events: none;
-    }
-    #menu-overlay {
-      position: absolute; inset: 0;
-      display: none; z-index: 10;
-    }
-    #menu-overlay.visible { display: block; }
-    #menu-close {
-      position: absolute; top: 18px; right: 22px;
-      width: 40px; height: 40px; border: none; border-radius: 50%;
-      background: rgba(255,255,255,0.9); color: #000;
-      font-size: 22px; line-height: 40px; cursor: pointer;
-    }
-    #menu-close:hover { background: #fff; }
-    #hotspot-tip {
-      position: absolute; left: 0; top: 0;
-      transform: translate(14px, -50%);
-      color: #fbffbe; font-family: system-ui, sans-serif; font-size: 13px;
-      background: rgba(34,82,227,0.92); padding: 5px 10px; border-radius: 4px;
-      pointer-events: none; white-space: nowrap; z-index: 15;
-      opacity: 0; transition: opacity 0.12s ease;
-    }
-    #hotspot-tip.visible { opacity: 1; }
-    #fade {
-      position: absolute; inset: 0; background: #000;
-      opacity: 0; pointer-events: none; z-index: 20;
-      transition: opacity 0.26s ease;
-    }
-    #fade.on { opacity: 1; }
-  </style>
+
+  <title>LaBiblioteca.com</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="./assets/icono.png" />
+
+  <!-- Tipografía pixel 8-bit desde Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <!-- Hoja de estilos -->
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div id="info">Arrastrar para mirar · WASD moverse · Espacio/C subir/bajar · Shift correr · Rueda zoom · Clic en los puntos para abrir menús</div>
 
+  <!-- ============================================================
+  CURSOR PERSONALIZADO
+  El script actualiza el src (regular/pointer/rock) y la posición.
+  draggable="false" para que el navegador permita arrastrar la
+  imagen como si fuera un archivo.
+  ============================================================= -->
+  <img id="cursor" src="./assets/mouse-regular.png" alt="" draggable="false" />
+
+  <!-- Etiqueta que aparece al pasar por un hotspot.
+  El script le inyecta el texto y la posición. -->
   <div id="hotspot-tip"></div>
 
+  <!-- Contenedor de hotspots: el script crea un <button> por cada uno y
+  los reposiciona cada frame según la cámara. -->
+  <div id="hotspots"></div>
+
+  <!-- ============================================================
+  OVERLAY DE MENÚ
+  Es una capa vacía que se dibuja en el <canvas> de Three.js para
+  que pase por el shader pixelado.
+  ============================================================= -->
   <div id="menu-overlay">
+    <!-- aria-label es un nombre accesible al botón para lectores de pantalla. -->
     <button id="menu-close" aria-label="Cerrar">×</button>
   </div>
 
+  <!-- Capa para el fundido a negro transición con menú. -->
   <div id="fade"></div>
 
+  <!-- ============================================================
+  BOTONES W/A/S/D EN PANTALLA
+  data-key="x", el script sabe qué hace cada tecla.
+  Misma imagen para los 4, solo cambia texto y posición con el script.
+  ============================================================= -->
+  <div id="move-controls">
+    <button class="move-btn" data-key="w" style="grid-column:2;grid-row:1;">
+      <span>W</span><img src="./assets/button-movement.png" alt="Adelante" draggable="false">
+    </button>
+    <button class="move-btn" data-key="a" style="grid-column:1;grid-row:2;">
+      <span>A</span><img src="./assets/button-movement.png" alt="Izquierda" draggable="false">
+    </button>
+    <button class="move-btn" data-key="s" style="grid-column:2;grid-row:2;">
+      <span>S</span><img src="./assets/button-movement.png" alt="Atrás" draggable="false">
+    </button>
+    <button class="move-btn" data-key="d" style="grid-column:3;grid-row:2;">
+      <span>D</span><img src="./assets/button-movement.png" alt="Derecha" draggable="false">
+    </button>
+  </div>
+
+  <!-- ============================================================
+  IMPORTMAP
+  Importamos Three.js directamente en el navegador
+  ============================================================= -->
   <script type="importmap">
   {
     "imports": {
@@ -62,6 +83,11 @@
   }
   </script>
 
+  <!-- ============================================================
+  LÓGICA PRINCIPAL
+  type="module" para poder usar el importmap de arriba.
+  Sin esto, los imports dan error.
+  ============================================================= -->
   <script type="module" src="./main.js"></script>
 </body>
 </html>
