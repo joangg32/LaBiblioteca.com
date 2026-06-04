@@ -22,6 +22,13 @@
 <body>
 
   <!-- ============================================================
+  LOGO / HEADER
+  Fijo arriba a la izquierda, visible durante toda la experiencia.
+  pointer-events: none para que no bloquee clics ni arrastres.
+  ============================================================= -->
+  <img id="logo" src="./assets/logo.png" alt="LaBiblioteca.com" draggable="false" />
+
+  <!-- ============================================================
   CURSOR PERSONALIZADO
   El script actualiza el src (regular/pointer/rock) y la posición.
   draggable="false" para que el navegador permita arrastrar la
@@ -43,6 +50,10 @@
   que pase por el shader pixelado.
   ============================================================= -->
   <div id="menu-overlay">
+    <!-- Contenedor de zonas interactivas del menú. El script crea un <button>
+    por cada elemento del menú abierto y lo coloca sobre la imagen. Al hacer
+    hover se resalta con un cuadrado amarillo. -->
+    <div id="menu-elements"></div>
     <!-- aria-label es un nombre accesible al botón para lectores de pantalla. -->
     <button id="menu-close" aria-label="Cerrar">×</button>
   </div>

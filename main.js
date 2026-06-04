@@ -143,8 +143,8 @@ const keys = {
   d: false,
 };
 window.addEventListener('keydown', (e) => {
-  const k = e.key.toLowerCase();
-  if (k in keys) keys[k] = true;
+  const k = e.key.toLowerCase(); // definimos la tecla pulsada (para que se active tanto en mayus como en minus)
+  if (k in keys) keys[k] = true; // si la tecla que pulso está dentro de keys cambiar su estado a true
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
@@ -218,11 +218,41 @@ loadEnvironment(ENVIRONMENT_PATH);
 // Cada punto se coloca con un ángulo (yaw) y elevación (pitch) en grados.
 // yaw = 0 mira al frente, valores negativos a la izquierda.
 // pitch = 0 a la altura de los ojos, negativo hacia abajo (mesas).
+// `elements` define las ZONAS INTERACTIVAS de cada menú 2D. Cada zona es un
+// rectángulo en COORDENADAS NORMALIZADAS de la imagen (0..1), con origen en la
+// esquina superior izquierda:
+//   x, y = esquina superior izquierda;  w, h = ancho y alto.
+// Estas coordenadas son estimaciones a ojo: ajústalas mirando la imagen.
+// `name` se usa para el tooltip y para identificar el elemento al clicar.
 const HOTSPOTS = [
-  { name: 'Arcade',      image: './assets/menu-arcade.png', yawDeg: -180, pitchDeg:  15 },
-  { name: 'Ordenadores', image: './assets/menu-pc.png',     yawDeg:  -15, pitchDeg: -12 },
-  { name: 'Espejo',      image: './assets/menu-mirror.png', yawDeg:   75, pitchDeg:   0 },
-  { name: 'Radio',       image: './assets/menu-table.png',  yawDeg:  160, pitchDeg: -30 },
+  {
+    name: 'Ordenadores', image: './assets/menu-pc.png', yawDeg: -15, pitchDeg: -12,
+    elements: [
+      { name: 'Campana', x: 0.40, y: 0.65, w: 0.05, h: 0.15 },
+      { name: 'Monitor 1', x: 0.17, y: 0.45, w: 0.18, h: 0.32 },
+      { name: 'Monitor 2', x: 0.49, y: 0.4, w: 0.22, h: 0.35 },
+    ],
+  },
+  {
+    name: 'Espejo', image: './assets/menu-mirror.png', yawDeg: 75, pitchDeg: 0,
+    elements: [
+      { name: 'Espejo', x: 0.2, y: 0.25, w: 0.23, h: 0.45 },
+      { name: 'Acuario', x: 0.45, y: 0.58, w: 0.1, h: 0.18 },
+    ],
+  },
+  {
+    name: 'Radio', image: './assets/menu-table.png', yawDeg: 160, pitchDeg: -30,
+    elements: [
+      { name: 'Radio', x: 0.54, y: 0.28, w: 0.28, h: 0.42 },
+      { name: 'Cómic', x: 0.3, y: 0.52, w: 0.32, h: 0.35 },
+    ],
+  },
+  {
+    name: 'Arcade', image: './assets/menu-arcade.png', yawDeg: -180, pitchDeg: 15,
+    elements: [
+      { name: 'Máquina recreativa', x: 0.57, y: 0.4, w: 0.19, h: 0.5 }
+    ],
+  },
 ];
 
 // Distancia de los hotspots al orde de la esfera.
@@ -247,6 +277,7 @@ for (const spot of HOTSPOTS) {
   const el = document.createElement('button');
   el.className = 'hotspot';
   el.setAttribute('aria-label', spot.name);
+  
   // Hover: cambiar cursor a pointer y mostrar el tooltip.
   el.addEventListener('mouseenter', () => {
     cursorBase = 'pointer';
@@ -278,6 +309,7 @@ for (const spot of HOTSPOTS) {
 // ============================================================================
 // Referencias a los elementos del HTML que vamos a manipular.
 const menuOverlay = document.getElementById('menu-overlay');
+const menuElementsEl = document.getElementById('menu-elements');
 const menuClose = document.getElementById('menu-close');
 const tip = document.getElementById('hotspot-tip');
 const fadeEl = document.getElementById('fade');
@@ -291,7 +323,7 @@ for (const btn of moveControls.querySelectorAll('.move-btn')) {
   moveButtons[key] = btn; // todas las key se trataran como un boton dentro de movebuttons (animación)
 
   const press = (e) => {
-    e.preventDefault();
+    e.preventDefault(); // cancela el comportamiento por defecto del navegador
     keys[key] = true; // cuando cada usa se pulsa, cambia el estado a verdadero y se activa la clase
     btn.classList.add('pressed');
   };
@@ -345,6 +377,7 @@ function openMenu(spot) {
   tex.colorSpace = THREE.SRGBColorSpace;
   menuMaterial.map = tex;
   menuMaterial.needsUpdate = true;
+  buildMenuElements(spot); // crea las zonas interactivas de este menú.
   fitMenuPlane();
   menuOpen = true;
   menuOverlay.classList.add('visible'); // muestra el botón cerrar (×).
@@ -354,6 +387,92 @@ function closeMenu() {
   menuOpen = false;
   menuOverlay.classList.remove('visible');
   moveControls.classList.remove('hidden');
+  clearMenuElements(); // quita las zonas y oculta el tooltip.
+  tip.classList.remove('visible');
+}
+
+// ============================================================================
+// ZONAS INTERACTIVAS DENTRO DE UN MENÚ 2D
+// ============================================================================
+// Las zonas se definen en coordenadas normalizadas de la imagen (ver HOTSPOTS).
+// Aquí las convertimos en <button> sobre la imagen, las colocamos en píxeles y
+// las resaltamos con un cuadrado amarillo al hacer hover (estilo en styles.css).
+
+// Lista de zonas del menú abierto: { def, el } (def = datos, el = <button>).
+let currentMenuElements = [];
+
+// Acción al clicar una zona. De momento solo informa por consola; aquí es donde
+// engancharías abrir algo, reproducir un sonido, navegar, etc.
+function onMenuElementClick(spot, def) {
+  console.log(`Click en "${def.name}" (menú ${spot.name})`);
+}
+
+// Borra las zonas del menú anterior.
+function clearMenuElements() {
+  menuElementsEl.innerHTML = '';
+  currentMenuElements = [];
+}
+
+// Crea un <button> por cada zona del menú y le engancha hover/click.
+function buildMenuElements(spot) {
+  clearMenuElements();
+  for (const def of spot.elements || []) {
+    const el = document.createElement('button');
+    el.className = 'menu-element';
+    el.setAttribute('aria-label', def.name);
+
+    // Hover: cursor pointer + cuadrado amarillo (CSS) + tooltip con el nombre.
+    el.addEventListener('mouseenter', () => {
+      cursorBase = 'pointer';
+      setCursorImage('pointer');
+      tip.textContent = def.name;
+      tip.classList.add('visible');
+    });
+    el.addEventListener('mousemove', (e) => {
+      tip.style.left = `${e.clientX}px`;
+      tip.style.top = `${e.clientY}px`;
+    });
+    el.addEventListener('mouseleave', () => {
+      cursorBase = 'regular';
+      tip.classList.remove('visible');
+    });
+    // Clic: ejecuta la acción asociada a la zona.
+    el.addEventListener('click', () => onMenuElementClick(spot, def));
+
+    menuElementsEl.appendChild(el);
+    currentMenuElements.push({ def, el });
+  }
+}
+
+// Coloca cada zona en píxeles replicando la lógica "cover" de fitMenuPlane:
+// la imagen llena la pantalla y se recorta el sobrante por igual a ambos lados.
+function layoutMenuElements() {
+  const tex = menuMaterial.map;
+  if (!tex || !tex.image || currentMenuElements.length === 0) return;
+
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const screenAspect = W / H;
+  const imgAspect = tex.image.width / tex.image.height;
+
+  // sx/sy = cuánto se "agranda" la imagen respecto a la pantalla en cada eje
+  // (igual que menuPlane.scale en fitMenuPlane). El sobrante se centra.
+  let sx = 1, sy = 1;
+  if (imgAspect > screenAspect) sx = imgAspect / screenAspect;
+  else sy = screenAspect / imgAspect;
+
+  // Borde izquierdo/superior de la imagen en píxeles de pantalla.
+  const imgLeft = W * (1 - sx) / 2;
+  const imgTop = H * (1 - sy) / 2;
+  const imgW = W * sx;
+  const imgH = H * sy;
+
+  for (const { def, el } of currentMenuElements) {
+    el.style.left = `${imgLeft + def.x * imgW}px`;
+    el.style.top = `${imgTop + def.y * imgH}px`;
+    el.style.width = `${def.w * imgW}px`;
+    el.style.height = `${def.h * imgH}px`;
+  }
 }
 // 2 formas de cerrar el menú:
 menuClose.addEventListener('click', () => withFade(closeMenu)); // botón ×
@@ -473,6 +592,8 @@ function fitMenuPlane() {
     // Si la imagen es más alta que la pantalla se estira verticalmente.
     menuPlane.scale.set(1, screenAspect / imgAspect, 1);
   }
+  // Reposiciona las zonas interactivas para que sigan a la imagen.
+  layoutMenuElements();
 }
 
 // ============================================================================
@@ -503,9 +624,12 @@ const MAX_RADIUS = 2.5;
 renderer.setAnimationLoop(() => {
   // Si hay un menú abierto, solo se dibuja la escena del menú y se sale.
   if (menuOpen) {
+    hotspotsEl.style.display = 'none'; // ocultar los hotspots mientras el menú esté abierto.
     menuComposer.render();
     return;
   }
+  // Sin menú: asegurarse de que los hotspots estén visibles.
+  hotspotsEl.style.display = '';
 
   // Vector "adelante" (sin Y para que no suba hacia arriba). normalize lo deja de longitud 1.
   const forward = new THREE.Vector3();
@@ -522,9 +646,9 @@ renderer.setAnimationLoop(() => {
   if (keys.d) camera.position.addScaledVector(right, MOVE_SPEED);
 
   // Limitar la posición a un círculo de radio MAX_RADIUS (en el plano X/Z) para no salirse
-  const horiz = Math.hypot(camera.position.x, camera.position.z);
+  const horiz = Math.hypot(camera.position.x, camera.position.z); // distancia de la camara al centro
   if (horiz > MAX_RADIUS) {
-    const s = MAX_RADIUS / horiz;
+    const s = MAX_RADIUS / horiz; // factor por el que multipicar a horiz para que dé el límite del círculo
     camera.position.x *= s;
     camera.position.z *= s;
   }

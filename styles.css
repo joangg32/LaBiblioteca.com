@@ -23,7 +23,7 @@ html, body, canvas, button, #menu-overlay {
    position: fixed;
    left: 0;
    top: 0;
-   width: 30px;
+   width: 40px;
    height: auto;
    
    /* para que no bloquee los clics que pasan a través. */
@@ -31,6 +31,26 @@ html, body, canvas, button, #menu-overlay {
    z-index: 9999;
    /* Oculto al inicio lo muestra el script */
    display: none;
+}
+
+/* ================================================================
+   LOGO / HEADER
+   Fijo arriba a la izquierda, siempre visible. z-index muy alto
+   (por encima de menús, fundido y controles) pero por debajo del
+   cursor personalizado (9999) para que este se dibuje encima.
+   ================================================================ */
+#logo {
+   position: fixed;
+   top: 30px;
+   left: 50px;
+   /* Tamaño del logo: alto fijo, ancho proporcional. */
+   height: 200px;
+   width: auto;
+   /* No captura clics: la interacción pasa a través. */
+   pointer-events: none;
+   z-index: 9000;
+   /* Mantener nítido el pixel-art (quítalo si el logo no es pixelado). */
+   image-rendering: pixelated;
 }
 
 /* ================================================================
@@ -70,6 +90,46 @@ html, body, canvas, button, #menu-overlay {
 }
 
 #menu-close:hover { background: #fff; }
+
+/* ================================================================
+   ZONAS INTERACTIVAS DENTRO DE UN MENÚ 2D
+   El script crea un <button class="menu-element"> por cada elemento del
+   menú abierto y lo posiciona sobre la imagen (en píxeles). Por defecto son
+   invisibles; al hacer hover se dibuja un cuadrado amarillo alrededor.
+   ================================================================ */
+#menu-elements {
+   position: absolute;
+   inset: 0;
+   /* El contenedor no captura clics; solo los .menu-element hijos. */
+   pointer-events: none;
+}
+
+.menu-element {
+   position: absolute;
+   /* El script fija left/top/width/height en píxeles. */
+   margin: 0;
+   padding: 0;
+   background: transparent;
+   /* Borde transparente por defecto para que no haya salto al hacer hover
+      (el grosor del borde ya ocupa su sitio). */
+   border: 4px solid transparent;
+   box-sizing: border-box;
+   /* Esquinas rectas: queremos un cuadrado, no un círculo. */
+   border-radius: 0;
+   pointer-events: auto;
+   cursor: none;
+   /* Transición suave del resaltado. */
+   transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+/* Cuadrado amarillo al pasar el ratón por encima. */
+.menu-element:hover {
+   border-color: #ffe600;
+   background: rgba(255, 230, 0, 0.12);
+   /* Halo amarillo para que destaque sobre la imagen pixelada. */
+   box-shadow: 0 0 0 2px rgba(255, 230, 0, 0.35),
+               inset 0 0 0 2px rgba(255, 230, 0, 0.25);
+}
 
 /* ================================================================
    HOTSPOTS (puntos de interacción)
@@ -176,7 +236,7 @@ html, body, canvas, button, #menu-overlay {
    /* Rejilla CSS 3 columnas de 52 px. El script coloca cada botón en su
       celda con grid-column y grid-row inline. */
    display: grid;
-   grid-template-columns: repeat(3, 52px);
+   grid-template-columns: repeat(3, 86px);
    gap: 6px;
    /* para que no permita seleccionar el texto al hacer clic. */
    user-select: none;
@@ -206,8 +266,8 @@ html, body, canvas, button, #menu-overlay {
    font-weight: 400;
 }
 .move-btn img {
-   width: 46px;
-   height: 46px;
+   width: 80px;
+   height: 80px;
    display: block;
    /* Animacion para el efectode de pulsar. */
    transition: transform 0.08s ease, filter 0.08s ease;
