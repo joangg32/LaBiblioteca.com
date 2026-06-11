@@ -1,23 +1,131 @@
 <!DOCTYPE html>
+<!-- idioma -->
 <html lang="es">
 <head>
+  <!-- UTF-8 permite acentos y símbolos como ×. -->
   <meta charset="UTF-8" />
+  <!--  página con ancho real del dispositivo. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Escena Three.js con HDRI</title>
-  <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
-    canvas { display: block; }
-    #info {
-      position: absolute; top: 10px; left: 10px;
-      color: #fff; font-family: system-ui, sans-serif; font-size: 13px;
-      background: rgba(0,0,0,0.4); padding: 6px 10px; border-radius: 4px;
-      pointer-events: none;
-    }
-  </style>
+
+  <title>LaBiblioteca.com</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="./assets/icono.png" />
+
+  <!-- Tipografía pixel 8-bit desde Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <!-- Hoja de estilos -->
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div id="info">Click para entrar · WASD moverse · Espacio/C subir/bajar · Shift correr · Rueda zoom · Esc salir</div>
 
+  <!-- ============================================================
+  ONBOARDING / INTRO
+  Pantalla negra inicial con un texto que se escribe a modo de
+  máquina de escribir. El script (main.js) escribe el texto y
+  oculta la capa al pulsar ENTRAR (o Enter).
+  ============================================================= -->
+  <div id="onboarding">
+    <!-- Icono de fondo en baja opacidad (decorativo). -->
+    <img id="onboarding-bg" src="./assets/icono.png" alt="" aria-hidden="true" />
+    <!-- El nombre: arranca grande y centrado y luego sube (clase .up). -->
+    <h1 id="onboarding-title"></h1>
+    <p id="onboarding-text"></p>
+    <button id="onboarding-start">ENTRAR</button>
+  </div>
+
+  <!-- ============================================================
+  LOGO / HEADER
+  Fijo arriba a la izquierda, visible durante toda la experiencia.
+  pointer-events: none para que no bloquee clics ni arrastres.
+  ============================================================= -->
+  <img id="logo" src="./assets/logo.png" alt="LaBiblioteca.com" draggable="false" />
+
+  <!-- Icono, alineado con el logo pero en el lado derecho de la pantalla. -->
+  <img id="icono" src="./assets/icono.png" alt="" aria-hidden="true" draggable="false" />
+
+  <!-- ============================================================
+  CURSOR PERSONALIZADO
+  El script actualiza el src (regular/pointer/rock) y la posición.
+  draggable="false" para que el navegador permita arrastrar la
+  imagen como si fuera un archivo.
+  ============================================================= -->
+  <img id="cursor" src="./assets/mouse-regular.png" alt="" draggable="false" />
+
+  <!-- Etiqueta que aparece al pasar por un hotspot.
+  El script le inyecta el texto y la posición. -->
+  <div id="hotspot-tip"></div>
+
+  <!-- Contenedor de hotspots: el script crea un <button> por cada uno y
+  los reposiciona cada frame según la cámara. -->
+  <div id="hotspots"></div>
+
+  <!-- ============================================================
+  OVERLAY DE MENÚ
+  Es una capa vacía que se dibuja en el <canvas> de Three.js para
+  que pase por el shader pixelado.
+  ============================================================= -->
+  <div id="menu-overlay">
+    <!-- Foco: al pasar el ratón por un producto, este div se coloca justo
+    encima de él y su box-shadow gigante tiñe de azul TODO menos el producto,
+    para destacarlo. El script lo posiciona y lo muestra/oculta en el hover. -->
+    <div id="menu-spotlight"></div>
+    <!-- Contenedor de zonas interactivas del menú. El script crea un <button>
+    por cada elemento del menú abierto y lo coloca sobre la imagen. Al hacer
+    hover se resalta con un cuadrado amarillo. -->
+    <div id="menu-elements"></div>
+    <!-- Panel inferior: descripción del objeto (efecto máquina de escribir)
+    que el script rellena al hacer hover sobre una zona del menú. -->
+    <div id="menu-desc"></div>
+    <!-- aria-label es un nombre accesible al botón para lectores de pantalla. -->
+    <button id="menu-close" aria-label="Cerrar">X</button>
+  </div>
+
+  <!-- Capa para el fundido a negro transición con menú. -->
+  <div id="fade"></div>
+
+  <!-- ============================================================
+  BOTONES W/A/S/D EN PANTALLA
+  data-key="x", el script sabe qué hace cada tecla. Cada botón es un recuadro
+  minimal con la letra de la tecla dentro. El estilo vive en styles.css.
+  ============================================================= -->
+  <div id="move-controls">
+    <button class="move-btn" data-key="w" aria-label="Adelante" style="grid-column:2;grid-row:1;">W</button>
+    <button class="move-btn" data-key="a" aria-label="Izquierda" style="grid-column:1;grid-row:2;">A</button>
+    <button class="move-btn" data-key="s" aria-label="Atrás" style="grid-column:2;grid-row:2;">S</button>
+    <button class="move-btn" data-key="d" aria-label="Derecha" style="grid-column:3;grid-row:2;">D</button>
+  </div>
+
+  <!-- ============================================================
+  AVISO: PANTALLA PEQUEÑA (solo escritorio)
+  Capa a pantalla completa que aparece cuando la ventana del navegador
+  se hace demasiado pequeña. El script (main.js) la muestra/oculta según
+  el tamaño de la ventana en cada 'resize'.
+  ============================================================= -->
+  <div id="small-screen-warning">
+    <img class="warning-icon" src="./assets/icono.png" alt="" aria-hidden="true" draggable="false" />
+    <p class="warning-text">Estás haciendo la pantalla más pequeña.</p>
+    <p class="warning-sub">Por favor, agranda la ventana para sumergirte en <strong>LaBiblioteca.com</strong></p>
+  </div>
+
+  <!-- ============================================================
+  AVISO: DISPOSITIVO MÓVIL
+  Capa a pantalla completa que aparece cuando se entra desde un móvil o
+  tablet. La experiencia está pensada para ratón y teclado, así que se
+  pide entrar desde un ordenador. El script la muestra al detectar móvil.
+  ============================================================= -->
+  <div id="mobile-warning">
+    <img class="warning-icon" src="./assets/icono.png" alt="" aria-hidden="true" draggable="false" />
+    <p class="warning-text">Esta experiencia es para ordenador.</p>
+    <p class="warning-sub">Por favor, entra desde un ordenador para sumergirte en <strong>LaBiblioteca.com</strong></p>
+  </div>
+
+  <!-- ============================================================
+  IMPORTMAP
+  Importamos Three.js directamente en el navegador
+  ============================================================= -->
   <script type="importmap">
   {
     "imports": {
@@ -27,6 +135,11 @@
   }
   </script>
 
+  <!-- ============================================================
+  LÓGICA PRINCIPAL
+  type="module" para poder usar el importmap de arriba.
+  Sin esto, los imports dan error.
+  ============================================================= -->
   <script type="module" src="./main.js"></script>
 </body>
 </html>

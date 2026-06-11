@@ -1,0 +1,1041 @@
+/* ================================================================
+   RESET BÁSICO
+   ================================================================ */
+/* Sin márgenes ni padding por defecto, sin scroll y fondo negro:
+   la escena 3D ocupa toda la pantalla. */
+html, body { 
+   margin: 0;
+   padding: 0;
+   overflow: hidden;
+   background: #000; }
+
+/* Oculta el cursor en todos los elementos interactivos.
+El cursor visible es la imagen #cursor que mueve el script. */
+html, body, canvas, button, #menu-overlay { 
+   cursor: none; 
+}
+
+/* ================================================================
+   CURSOR PERSONALIZADO
+   ================================================================ */
+#cursor {
+  /* anclado a la ventana */
+   position: fixed;
+   left: 0;
+   top: 0;
+   width: 30px;
+   height: auto;
+   
+   /* para que no bloquee los clics que pasan a través. */
+   pointer-events: none;
+   z-index: 9999;
+   /* Oculto al inicio lo muestra el script */
+   display: none;
+}
+
+/* ================================================================
+   LOGO / HEADER
+   Fijo arriba a la izquierda, siempre visible. z-index muy alto
+   (por encima de menús, fundido y controles) pero por debajo del
+   cursor personalizado (9999) para que este se dibuje encima.
+   ================================================================ */
+#logo {
+   position: fixed;
+   top: 20px;
+   right: 30px;
+   /* Tamaño del logo: alto fijo, ancho proporcional. */
+   height: 15px;
+   width: auto;
+   /* No captura clics: la interacción pasa a través. */
+   pointer-events: none;
+   z-index: 9000;
+   /* Mantener nítido el pixel-art (quítalo si el logo no es pixelado). */
+   image-rendering: pixelated;
+}
+
+/* Icono: misma altura y línea superior que el logo, pero anclado a la derecha. */
+#icono {
+   position: fixed;
+   top: 20px;
+   left: 30px;
+   height: 60px;
+   width: auto;
+   pointer-events: none;
+   z-index: 9000;
+   image-rendering: pixelated;
+}
+
+/* ================================================================
+   ONBOARDING / INTRO
+   Pantalla negra a pantalla completa con texto "máquina de escribir".
+   z-index 9998: por debajo del cursor personalizado (9999) para que
+   este se vea por encima de la intro.
+   ================================================================ */
+#onboarding {
+   position: fixed;
+   inset: 0;
+   background: #000;
+   z-index: 9998;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 40px;
+   padding: 24px;
+   /* Ocultamos el cursor del sistema también sobre la intro para que
+      solo se vea el cursor personalizado. */
+   cursor: none;
+   /* Fundido al cerrar (lo dispara la clase .hidden). */
+   transition: opacity 0.6s ease;
+}
+
+/* El script añade .hidden para cerrar la intro con un fundido. */
+#onboarding.hidden {
+   opacity: 0;
+   pointer-events: none;
+}
+
+/* Icono de fondo: centrado, muy tenue. */
+#onboarding-bg {
+   position: absolute;
+   top: 50%;
+   left: 50%;
+   transform: translate(-50%, -50%);
+   width: min(60vw, 480px);
+   max-width: 80%;
+   opacity: 0.1;
+   pointer-events: none;
+   user-select: none;
+   z-index: 0;
+}
+
+/* El nombre. Arranca grande y centrado y, al añadir .up,
+se reduce para dejar sitio al texto que se escribe. */
+#onboarding-title {
+   position: relative;
+   z-index: 1;
+   margin: 0;
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 40px;
+   text-align: center;
+   text-shadow: 0 0 18px rgba(251, 255, 190, 0.35);
+   transition: font-size 0.9s ease;
+}
+#onboarding-title.up {
+   font-size: 20px;
+}
+
+/* Se redacta en el script y se anima ahi */
+#onboarding-text {
+   position: relative;
+   z-index: 1;
+   max-width: 660px;
+   margin: 0;
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 14px;
+   line-height: 1.5;
+   text-align: left;
+   /* pre-wrap respeta los saltos de línea del texto del script. */
+   white-space: pre-wrap;
+   /* Oculto hasta que el nombre sube (clase .reveal). */
+   opacity: 0;
+   transition: opacity 0.6s ease;
+}
+#onboarding-text.reveal {
+   opacity: 1;
+}
+/* Cursor que parpadea al final del texto. */
+#onboarding-text .caret,
+#onboarding-title .caret {
+   display: inline-block;
+   animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+#onboarding-start {
+   position: relative;
+   z-index: 1;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 12px;
+   color: #000;
+   background: #fbffbe;
+   border: none;
+   padding: 14px 22px;
+   cursor: none;
+   /* Aparece solo cuando el texto termina de escribirse (.ready). */
+   opacity: 0;
+   transform: translateY(8px);
+   pointer-events: none;
+   transition: opacity 0.4s ease, transform 0.4s ease, filter 0.1s ease;
+}
+#onboarding-start.ready {
+   opacity: 1;
+   transform: translateY(0);
+   pointer-events: auto;
+}
+#onboarding-start:hover { filter: brightness(1.1); }
+
+/* ================================================================
+   AVISOS A PANTALLA COMPLETA (pantalla pequeña / móvil)
+   Misma estética que la intro: fondo negro, tipografía pixel y texto
+   crema. z-index 10000: por encima de TODO (incluido el cursor falso)
+   para tapar la experiencia mientras el aviso esté activo. Como cubren
+   el cursor personalizado, devolvemos el cursor del sistema con
+   cursor:auto para que el usuario siga viendo dónde apunta.
+   El script (main.js) añade la clase .visible para mostrarlos.
+   ================================================================ */
+#small-screen-warning,
+#mobile-warning {
+   position: fixed;
+   inset: 0;
+   background: #000;
+   z-index: 10000;
+   /* Ocultos por defecto: el script los muestra con .visible. */
+   display: none;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 26px;
+   padding: 32px;
+   text-align: center;
+   cursor: auto;
+}
+/* El script muestra el aviso correspondiente. */
+#small-screen-warning.visible,
+#mobile-warning.visible {
+   display: flex;
+}
+
+/* Icono decorativo tenue, como en la intro. */
+.warning-icon {
+   width: min(40vw, 160px);
+   max-width: 60%;
+   opacity: 0.18;
+   user-select: none;
+   image-rendering: pixelated;
+}
+
+/* Texto principal del aviso. */
+.warning-text {
+   margin: 0;
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 18px;
+   line-height: 1.5;
+   text-shadow: 0 0 18px rgba(251, 255, 190, 0.35);
+}
+
+/* Subtexto (la petición concreta). */
+.warning-sub {
+   margin: 0;
+   max-width: 560px;
+   color: #d5d9a2;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 12px;
+   line-height: 1.7;
+}
+.warning-sub strong { color: #fbffbe; }
+
+/* En pantallas muy estrechas, achicamos el texto para que quepa. */
+@media (max-width: 480px) {
+   .warning-text { font-size: 14px; }
+   .warning-sub { font-size: 10px; }
+}
+
+/* ================================================================
+   OVERLAY DEL MENÚ (capa que aparece al pulsar un hotspot)
+   ================================================================ */
+#menu-overlay {
+   /* inset: 0 para centrarlo */
+   position: absolute;
+   inset: 0;
+   /* Oculto al inicio lo muestra el script */
+   display: none;
+   /* Entre el cursor y la escena */
+   z-index: 10;
+}
+/* Cuando el script añade la clase visible, se muestra el overlay. */
+#menu-overlay.visible {
+   display: block;
+}
+
+/* Botón para cerrar el menú: cuadrado pixel-art con la "X" en tipografía
+   8-bit. Doble contorno (borde amarillo + sombra negra) para que destaque
+   sobre la imagen y mantenga la estética retro. */
+#menu-close {
+   position: absolute;
+   top: 50px;
+   right: 30px;
+
+   width: 44px;
+   height: 44px;
+
+   /* Esquinas rectas + borde grueso = look de píxel. */
+   border: 3px solid #fbffbe;
+   border-radius: 0;
+   background: #0b166b;
+   color: #fbffbe;
+
+   /* La X usa la fuente pixel; line-height 1 para centrarla en la caja. */
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 16px;
+   line-height: 1;
+   /* Contorno negro exterior para separar el botón del fondo. */
+   box-shadow: 0 0 0 3px #000;
+   image-rendering: pixelated;
+   transition: background 0.1s steps(1), color 0.1s steps(1);
+}
+
+/* Hover: invierte colores (amarillo de fondo, X azul oscuro). */
+#menu-close:hover {
+   background: #fbffbe;
+   color: #0b166b;
+}
+
+/* ================================================================
+   ZONAS INTERACTIVAS DENTRO DE UN MENÚ 2D
+   El script crea un <button class="menu-element"> por cada elemento del
+   menú abierto y lo posiciona sobre la imagen (en píxeles). Por defecto son
+   invisibles; al hacer hover se dibuja un cuadrado amarillo alrededor.
+   ================================================================ */
+#menu-elements {
+   position: absolute;
+   inset: 0;
+   /* El contenedor no captura clics; solo los .menu-element hijos. */
+   pointer-events: none;
+   /* Por encima del foco azul (#menu-spotlight) para que el cuadrado amarillo
+      del producto resaltado quede visible sobre el tinte. */
+   z-index: 2;
+}
+
+/* ================================================================
+   FOCO / SPOTLIGHT (destacar el producto al hacer hover)
+   Un div colocado justo encima del producto. Su box-shadow con un
+   spread enorme pinta de azul translúcido TODA la pantalla salvo el
+   rectángulo del propio producto, que queda como un "agujero" sin teñir.
+   ================================================================ */
+#menu-spotlight {
+   position: absolute;
+   /* El script fija left/top/width/height en píxeles sobre el producto. */
+   left: 0;
+   top: 0;
+   width: 0;
+   height: 0;
+   /* No bloquea clics: el hover sigue llegando al .menu-element de debajo. */
+   pointer-events: none;
+   /* El tinte azul que cubre todo menos este rectángulo. 100vmax garantiza
+      que tape la pantalla entera en cualquier dirección. */
+   box-shadow: 0 0 0 100vmax rgba(11, 22, 107, 0.35);
+   /* Debajo de #menu-elements (z:2) y del panel de descripción (z:12). */
+   z-index: 1;
+   /* Oculto por defecto; aparece/desaparece con un fundido suave. */
+   opacity: 0;
+   transition: opacity 0.2s ease;
+}
+#menu-spotlight.visible { opacity: 1; }
+
+.menu-element {
+   position: absolute;
+   /* El script fija left/top/width/height en píxeles. */
+   margin: 0;
+   padding: 0;
+   background: transparent;
+   /* Borde transparente por defecto para que no haya salto al hacer hover
+      (el grosor del borde ya ocupa su sitio). */
+   border: 4px solid transparent;
+   box-sizing: border-box;
+   /* Esquinas rectas: queremos un cuadrado, no un círculo. */
+   border-radius: 0;
+   pointer-events: auto;
+   cursor: none;
+   /* Transición suave del resaltado. */
+   transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+/* Cuadrado amarillo al pasar el ratón por encima. */
+.menu-element:hover {
+   border-color: #ffe600;
+   background: rgba(255, 230, 0, 0.12);
+   /* Halo amarillo para que destaque sobre la imagen pixelada. */
+   box-shadow: 0 0 0 2px rgba(255, 230, 0, 0.35),
+               inset 0 0 0 2px rgba(255, 230, 0, 0.25);
+}
+
+/* ================================================================
+   PANEL DE DESCRIPCIÓN DEL OBJETO (efecto máquina de escribir)
+   Banda inferior dentro del menú. El script escribe aquí la
+   descripción del objeto al hacer hover sobre su zona.
+   ================================================================ */
+#menu-desc {
+   position: absolute;
+   left: 50%;
+   bottom: 40px;
+   transform: translateX(-50%);
+   /* Ancho cómodo y centrado, sin pasarse del borde en pantallas pequeñas. */
+   width: min(720px, calc(100% - 48px));
+   box-sizing: border-box;
+   padding: 18px 22px;
+   /* Caja oscura semitransparente para leer sobre la imagen pixelada. */
+   background: rgba(0, 0, 0, 0.72);
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 12px;
+   line-height: 1.9;
+   text-align: left;
+   white-space: pre-wrap;
+   pointer-events: none;
+   z-index: 12;
+   /* Oculto por defecto; aparece con un fundido al hacer hover. */
+   opacity: 0;
+   transition: opacity 0.2s ease;
+}
+#menu-desc.visible { opacity: 1; }
+
+/* Variante: descripción anclada a la IZQUIERDA (Radio, Arcade). */
+#menu-desc.desc-left {
+   left: 200px;
+   bottom: 500px;
+   right: auto;
+   transform: none;
+   width: min(440px, calc(50% - 40px));
+}
+/* Variante: descripción anclada a la DERECHA (Espejo). */
+#menu-desc.desc-right {
+   left: auto;
+   bottom: 500px;
+   right: 200px;
+   transform: none;
+   width: min(440px, calc(50% - 40px));
+}
+
+/* ================================================================
+   HOTSPOTS (puntos de interacción)
+   El contenedor cubre toda la pantalla pero NO bloquea clics
+   (pointer-events: none). Sólo los hijos .hotspot reciben eventos.
+   Cuando hay drag, menú abierto o transición, .locked en el padre
+   desactiva todos los hotspots a la vez.
+   ================================================================ */
+#hotspots {
+   position: fixed;
+   inset: 0;
+   pointer-events: none;
+   /* Encima del canvas pero por debajo del menú (z=10) y del tip (z=15). */
+   z-index: 5;
+}
+#hotspots .hotspot {
+   pointer-events: auto;
+}
+#hotspots.locked .hotspot {
+   pointer-events: none;
+}
+
+.hotspot {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 30px;
+   height: 30px;
+   padding: 0;
+   /* Rombo (cuadrado girado 45°) con esquinas rectas = gema pixel-art. */
+   border-radius: 0;
+   background: #fbffbe;
+   border: 4px solid #0b166b;
+   image-rendering: pixelated;
+   /* Anclamos por el centro, giramos 45° (rombo) y animamos la escala. */
+   transform: translate(-50%, -50%) rotate(45deg) scale(1);
+   transition: transform 0.25s ease;
+   cursor: none;
+   /* Brillo amarillo pulsante para llamar la atención (no toca el transform,
+      así el escalado del hover sigue funcionando). */
+   animation: hotspot-glow 1.4s ease-in-out infinite;
+}
+/* Halo que late: de tenue a marcado y vuelta. */
+@keyframes hotspot-glow {
+   0%, 100% { box-shadow: 0 0 6px rgba(251, 255, 190, 0.5); }
+   50%      { box-shadow: 0 0 0 4px rgba(251, 255, 190, 0.25),
+                          0 0 16px rgba(251, 255, 190, 0.9); }
+}
+.hotspot:hover {
+   transform: translate(-50%, -50%) rotate(45deg) scale(1.5);
+}
+/* El script añade .hidden cuando el hotspot queda detrás de la cámara
+   o fuera del frustum, para evitar verlo "pegado" a un lateral. */
+.hotspot.hidden {
+   display: none;
+}
+
+/* ================================================================
+   TOOLTIP DE HOTSPOT (etiquetita junto al cursor)
+   ================================================================ */
+#hotspot-tip {
+   position: absolute;
+   left: 0;
+   top: 0;
+   /* desplazar la etiqueta para que no se tape por el cursor */
+   transform: translate(14px, -100%);
+   color: #fbffbe;
+   /* tipografía retro pixel 8-bit */
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 15px;
+   letter-spacing: 0.5px;
+   background: grey;
+   padding: 5px 10px;
+   border-radius: 4px;
+   pointer-events: none;
+   /* nowrap para que el texto se rompa en 2 líneas */
+   white-space: nowrap;
+   z-index: 15;
+   /* Invisible por defecto aparece con transición. */
+   opacity: 0;
+   transition: opacity 0.25s ease;
+}
+#hotspot-tip.visible { opacity: 1; }
+
+/* ================================================================
+   FUNDIDO A NEGRO (transición entre escena y menús)
+   ================================================================ */
+#fade {
+   position: absolute;
+   inset: 0;
+   background: #000;
+   /* Por defecto invisible y no bloquea los clics. */
+   opacity: 0;
+   pointer-events: none;
+   /* por encima del menú, para taparlo durante la transición. */
+   z-index: 20;
+   /* La transición debe coincidir con el setTimeout() del script. */
+   transition: opacity 0.26s ease;
+}
+/* Cuando el script añade la clase .on, la pantalla se pone en negro. */
+#fade.on { opacity: 1; }
+
+/* ================================================================
+   BOTONES DE MOVIMIENTO W/A/S/D EN PANTALLA
+   ================================================================ */
+#move-controls {
+   position: absolute;
+   right: 50px;
+   bottom: 50px;
+   z-index: 16;
+   /* Rejilla CSS 3 columnas de 52 px. El script coloca cada botón en su
+      celda con grid-column y grid-row inline. */
+   display: grid;
+   grid-template-columns: repeat(3, 30px);
+   gap: 8px;
+   /* para que no permita seleccionar el texto al hacer clic. */
+   user-select: none;
+   /* touch-action: none para que el (scroll, zoom) esté desactivado. */
+   touch-action: none;
+}
+/* Al abrir un menú, el script añade .hidden para ocultarlos. */
+#move-controls.hidden { display: none; }
+
+/* Recuadro pequeño con la misma estética que los hotspots: fondo crema,
+   borde azul oscuro grueso, esquinas rectas y look pixel-art. */
+.move-btn {
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   width: 30px;
+   height: 30px;
+   border: 3px solid #fbffbe;
+   border-radius: 0;
+   background: #0b166b;
+   color: #fbffbe;
+   image-rendering: pixelated;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 8px;
+   line-height: 1;
+   padding: 0;
+   cursor: none;
+   box-shadow: 0 0 0 2px #000;
+   /* Animación con steps(1) para que el cambio de color sea "duro" (retro). */
+   transition: background 0.08s steps(1), color 0.08s steps(1), transform 0.08s ease;
+}
+
+/* Hover: invierte colores (amarillo de fondo, letra azul oscuro). */
+.move-btn:hover {
+   background: #fbffbe;
+   color: #0b166b;
+}
+
+/* :active (clic) y .pressed (que añade el script al pulsar la tecla física):
+   invierte colores y se encoge un poco → feedback visual de pulsación. */
+.move-btn:active, .move-btn.pressed {
+   background: #fbffbe;
+   color: #0b166b;
+   transform: scale(0.9);
+}
+
+/* ================================================================
+   INTERACCIONES (overlay compartido)
+   Capas que abre cada elemento del menú (campana no, esa solo suena).
+   Viven por encima del menú y del fundido, pero por debajo del cursor
+   personalizado (9999) y de la intro (10000).
+   ================================================================ */
+.iv-backdrop {
+   position: fixed;
+   inset: 0;
+   z-index: 5000;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   background: rgba(0, 0, 0, 0.6);
+   /* Fundido de entrada/salida (lo activa la clase .visible desde el script). */
+   opacity: 0;
+   transition: opacity 0.2s ease;
+}
+.iv-backdrop.visible { opacity: 1; }
+
+/* Panel sin marco: transparente, el contenido flota sobre el fondo oscuro y
+   marca su propio tamaño. */
+.iv-panel {
+   position: relative;
+   max-width: calc(100vw - 40px);
+   max-height: calc(100vh - 40px);
+   background: transparent;
+   border: none;
+   box-shadow: none;
+   /* Pequeño "pop" de entrada. */
+   transform: scale(0.96);
+   transition: transform 0.2s ease;
+   display: flex;
+   flex-direction: column;
+}
+.iv-backdrop.visible .iv-panel { transform: scale(1); }
+.iv-panel > .iv-body { overflow: visible; }
+
+/* Botón de cerrar reutilizando el look del cierre de menú. */
+.iv-close {
+   position: absolute;
+   top: 6px;
+   right: 8px;
+   width: 26px;
+   height: 26px;
+   border: 2px solid #0b166b;
+   border-radius: 0;
+   background: #fbffbe;
+   color: #0b166b;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 11px;
+   line-height: 1;
+   z-index: 2;
+   transition: background 0.1s steps(1), color 0.1s steps(1);
+}
+.iv-close:hover { background: #ffe600; }
+
+/* Zona de contenido (scroll si hace falta). */
+.iv-body {
+   flex: 1 1 auto;
+   overflow: auto;
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   display: flex;
+   flex-direction: column;
+   min-height: 0;
+}
+
+/* Ocultar el cursor del sistema en TODA la interacción y sus hijos (incluidos
+   inputs y textarea, que por defecto muestran la "I" de texto). Así solo se ve
+   el cursor personalizado también al escribir. */
+.iv-backdrop,
+.iv-backdrop * {
+   cursor: none;
+}
+
+/* ================================================================
+   MOCKUP: interacción DENTRO del marco de un dispositivo
+   La foto del aparato (monitor, espejo, recreativa) hace de chrome y
+   el contenido se coloca en su "pantalla" (.iv-screen), posicionada en
+   porcentajes para que escale junto a la imagen.
+   ================================================================ */
+.iv-mockup {
+   position: relative;
+   display: inline-block;
+   line-height: 0;            /* evita el hueco bajo la imagen. */
+}
+.iv-frame-img {
+   display: block;
+   max-width: 90vw;
+   max-height: 90vh;
+   width: auto;
+   height: auto;
+   pointer-events: none;
+   user-select: none;
+   /* Mantiene los bloques duros al escalar (coherente con el shader pixel). */
+   image-rendering: pixelated;
+}
+/* Marco por delante de la pantalla (screenBehind): el contenido (vídeo) se ve
+   a través del PNG/cristal. position+z-index para ganarle a la pantalla absolute. */
+.iv-frame-front {
+   position: relative;
+   z-index: 2;
+}
+/* La pantalla: el script fija left/top/width/height en % sobre el marco. */
+.iv-screen {
+   position: absolute;
+   background: #000;          /* fondo de "pantalla encendida". */
+   line-height: normal;       /* reinicia el line-height:0 del marco. */
+}
+/* En modo mockup la X es IDÉNTICA a la del menú (#menu-close): mismo cuadrado
+   azul oscuro con borde crema y X que invierte al pasar el ratón, y en la misma
+   esquina superior derecha de la pantalla. */
+.iv-mockup-close {
+   top: 50px;
+   right: 30px;
+   width: 44px;
+   height: 44px;
+   border: 3px solid #fbffbe;
+   background: #0b166b;
+   color: #fbffbe;
+   font-size: 16px;
+   box-shadow: 0 0 0 3px #000;
+   image-rendering: pixelated;
+}
+.iv-mockup-close:hover {
+   background: #fbffbe;
+   color: #0b166b;
+}
+
+/* ================================================================
+   ORDENADOR 1 — REGISTRO (tipografía de 8 px)
+   ================================================================ */
+.iv-register {
+   font-size: 16px;          /* <- tipografía de 8 px pedida. */
+   line-height: 1.8;
+   padding: 30px 60px 60px 10px;
+   gap: 12px;
+   /* Centra el contenido para poder estrecharlo con un ancho máximo. */
+   align-items: center;
+}
+/* Contenedor del texto/campos más estrecho dentro de la pantalla del monitor. */
+.reg-intro, .reg-form, .reg-list {
+   width: 500px;   /* baja este valor para estrecharlo aún más. */
+}
+.reg-intro { margin: 0 0 4px; color: #99d397; }
+.reg-form { display: flex; flex-direction: column; gap: 12px; }
+.reg-label { display: flex; flex-direction: column; gap: 6px; }
+.reg-input {
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 12px;
+   line-height: 1.6;
+   color: #0b166b;
+   background: #fbffbe;
+   border: 2px solid #fbffbe;
+   outline: none;
+   padding: 8px;
+   border-radius: 0;
+   /* Que ocupen justo el ancho del hueco (padding/borde incluidos) y puedan
+      encoger: evita que el campo se salga de la pantalla del monitor. */
+   width: 100%;
+   box-sizing: border-box;
+   min-width: 0;
+}
+/* Las etiquetas también deben poder encoger dentro del flex. */
+.reg-label { min-width: 0; }
+.reg-input:focus { border-color: #ffe600; }
+.reg-textarea { resize: none; }
+.reg-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.reg-btn {
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 12px;
+   color: #0b166b;
+   background: #fbffbe;
+   border: 2px solid #000;
+   padding: 9px 12px;
+   transition: background 0.1s steps(1);
+}
+.reg-btn:hover { background: #ffe600; }
+.reg-btn:disabled { opacity: 0.4; }
+.reg-btn-ghost { background: #99d397; }
+.reg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.reg-item { border: 2px solid #2252e3; padding: 8px; background: rgba(34, 82, 227, 0.18); }
+.reg-item-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.reg-item-name { color: #ffe600; }
+.reg-item-date { color: #99d397; font-size: 7px; }
+.reg-item-msg { margin: 0; color: #fbffbe; }
+.reg-empty { color: #99d397; }
+
+/* ================================================================
+   ORDENADOR 2 — FUERA DE SERVICIO
+   ================================================================ */
+.iv-offline { padding: 0; }
+.off-screen {
+   flex: 1;
+   background: #0b166b;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 18px;
+   text-align: center;
+   padding: 24px;
+   /* Líneas de scanline encima del contenido. */
+   position: relative;
+   overflow: hidden;
+}
+.off-screen::after {
+   content: '';
+   position: absolute;
+   inset: 0;
+   pointer-events: none;
+   background: repeating-linear-gradient(
+      0deg, rgba(0, 0, 0, 0.25) 0 2px, transparent 2px 4px);
+}
+.off-glitch {
+   font-size: 20px;
+   color: #ffe600;
+   animation: off-blink 1.1s steps(2) infinite;
+}
+@keyframes off-blink { 50% { opacity: 0.25; transform: translateX(2px); } }
+.off-code { font-size: 14px; color: #99d397; margin: 0; }
+.off-msg { font-size: 14px; line-height: 2; color: #fbffbe; margin: 0; }
+.off-prompt { font-size: 14px; color: #fbffbe; margin: 8px 0 0; }
+.off-caret { animation: caret-blink 1s steps(1) infinite; }
+
+/* ================================================================
+   ESPEJO — pixel-cam (p5.js)
+   ================================================================ */
+.iv-mirror {
+   align-items: center;
+   justify-content: center;
+   padding: 4px;
+}
+.mirror-msg { font-size: 10px; color: #99d397; text-align: center; }
+.mirror-canvas { line-height: 0; image-rendering: pixelated; max-width: 100%; max-height: 100%; }
+/* El canvas se contiene dentro de la pantalla del marco conservando proporción. */
+.mirror-canvas canvas {
+   image-rendering: pixelated;
+   display: block;
+   max-width: 100%;
+   max-height: 100%;
+}
+
+/* ================================================================
+   ACUARIO — vídeo dentro del marco (mockup)
+   El vídeo llena la pantalla del marco; object-fit:cover recorta para
+   no deformarlo. Sin pixelado: se ve con su nitidez y color reales.
+   ================================================================ */
+.iv-aquarium {
+   display: block;     /* anula el flex de .iv-body: el vídeo se posiciona solo. */
+   padding: 0;
+   background: #000;
+}
+.aquarium-video {
+   position: absolute;
+   inset: 0;
+   width: 100%;
+   height: 100%;
+   object-fit: cover;
+   display: block;
+}
+
+/* ================================================================
+   CÓMIC — libro a dos páginas con volteo realista (turn.js)
+   turn.js dimensiona y posiciona el .comic-flipbook y sus .comic-page
+   en píxeles; aquí solo damos el papel, la sombra del libro y el ajuste
+   de las imágenes a cada página.
+   ================================================================ */
+.iv-comic { padding: 16px; align-items: center; gap: 14px; }
+.comic-stage {
+   position: relative;
+   width: 100%;
+   flex: 1 1 auto;
+   min-height: 0;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+}
+.comic-flipbook {
+   /* turn.js le fija width/height; sombra de libro bajo las hojas. */
+   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+.comic-flipbook .comic-page {
+   background: #d5d9a2;          /* papel crema bajo la imagen. */
+   overflow: hidden;
+}
+.comic-flipbook .comic-page img {
+   width: 100%;
+   height: 100%;
+   object-fit: cover;
+   display: block;
+   user-select: none;
+   -webkit-user-drag: none;
+}
+.comic-controls { display: flex; align-items: center; gap: 14px; }
+.comic-btn {
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 9px;
+   color: #0b166b;
+   background: #fbffbe;
+   border: 2px solid #000;
+   padding: 9px 12px;
+   transition: background 0.1s steps(1);
+}
+.comic-btn:hover:not(:disabled) { background: #ffe600; }
+.comic-btn:disabled { opacity: 0.4; }
+.comic-counter { font-size: 9px; color: #99d397; min-width: 60px; text-align: center; }
+
+/* ================================================================
+   RADIOCASSETE — botón flotante mientras suena
+   La radio arranca directamente al tocarla (sin menú). El único control
+   es el botón #radio-badge de la esquina, que aparece mientras suena.
+   ================================================================ */
+/* Ecualizador animado (barras que botan) que decora el badge. */
+.radio-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.radio-eq i {
+   width: 3px;
+   background: #99d397;
+   height: 30%;
+   animation: eq-bounce 0.6s ease-in-out infinite;
+}
+.radio-eq i:nth-child(2) { animation-delay: 0.15s; }
+.radio-eq i:nth-child(3) { animation-delay: 0.3s; }
+.radio-eq i:nth-child(4) { animation-delay: 0.45s; }
+.radio-eq i:nth-child(5) { animation-delay: 0.6s; }
+@keyframes eq-bounce { 0%, 100% { height: 25%; } 50% { height: 100%; } }
+
+/* Botón flotante "RADIO": aparece mientras suena; clic para parar. */
+#radio-badge {
+   position: fixed;
+   left: 24px;
+   bottom: 24px;
+   z-index: 4000;
+   display: none;
+   align-items: center;
+   gap: 8px;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 9px;
+   color: #fbffbe;
+   background: #0b166b;
+   border: 2px solid #fbffbe;
+   box-shadow: 0 0 0 2px #000;
+   padding: 8px 10px;
+}
+#radio-badge.visible { display: inline-flex; }
+#radio-badge:hover { background: #2252e3; }
+
+/* Botón flotante "MÚSICA": música ambiente por defecto; clic para silenciar.
+   Misma estética que la radio, colocado justo encima para no solaparse. */
+#ambient-badge {
+   position: fixed;
+   left: 24px;
+   bottom: 66px;
+   z-index: 4000;
+   display: none;
+   align-items: center;
+   gap: 8px;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 9px;
+   color: #fbffbe;
+   background: #0b166b;
+   border: 2px solid #fbffbe;
+   box-shadow: 0 0 0 2px #000;
+   padding: 8px 10px;
+   cursor: none;
+}
+#ambient-badge.visible { display: inline-flex; }
+#ambient-badge:hover { background: #2252e3; }
+/* Silenciada: para el ecualizador y baja la opacidad para indicar "off". */
+#ambient-badge.muted { opacity: 0.5; }
+#ambient-badge.muted .radio-eq i {
+   animation-play-state: paused;
+   height: 25%;
+}
+
+/* ================================================================
+   ARCADE — minijuego de marcianitos
+   ================================================================ */
+.iv-arcade { align-items: center; justify-content: center; padding: 6px; gap: 12px; }
+.arcade-wrap { position: relative; line-height: 0; max-width: 100%; max-height: 100%; }
+/* ----------------------------------------------------------------
+   AJUSTE MANUAL DEL CANVAS DENTRO DEL MARCO
+   Toca estas 4 variables para encajar el juego en el hueco a mano:
+     --arcade-w / --arcade-h : ancho/alto del canvas en pantalla.
+        · 'auto' = se autoajusta al hueco conservando proporción.
+        · o un valor fijo, p. ej. 90% o 380px.
+     --arcade-x / --arcade-y : desplazamiento fino (mueve el canvas
+        dentro del hueco). Positivo = derecha / abajo. P. ej. 6px, -10px.
+   (Para mover/redimensionar el HUECO entero usa SCREEN en interactions/arcade.js.)
+   ---------------------------------------------------------------- */
+.arcade-wrap {
+   --arcade-w: auto;
+   --arcade-h: auto;
+   --arcade-x: -10px;
+   --arcade-y: 20px;
+}
+.arcade-canvas {
+   image-rendering: pixelated;
+   width: var(--arcade-w);
+   height: var(--arcade-h);
+   max-width: 100%;
+   max-height: 100%;
+   transform: translate(var(--arcade-x), var(--arcade-y));
+   background: #000;
+}
+
+/* Panel de fin de partida / registro de puntuaciones (sobre el canvas). */
+.arcade-gameover {
+   position: absolute;
+   inset: 3px;                     /* dentro del borde del canvas. */
+   display: none;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 12px;
+   padding: 18px;
+   box-sizing: border-box;
+   background: rgba(11, 22, 107, 0.92);
+   color: #fbffbe;
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   overflow: auto;
+   line-height: 1.6;
+}
+.arcade-gameover.visible { display: flex; }
+.ag-title { font-size: 18px; color: #ffe600; margin: 0; text-align: center; }
+.ag-title.ag-win { color: #99d397; }
+.ag-score { font-size: 10px; color: #fbffbe; margin: 0; }
+.ag-form { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.ag-label { display: flex; flex-direction: column; gap: 8px; font-size: 8px; text-align: center; }
+.ag-input {
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 10px;
+   text-align: center;
+   text-transform: uppercase;
+   color: #0b166b;
+   background: #fbffbe;
+   border: 2px solid #fbffbe;
+   outline: none;
+   padding: 8px;
+}
+.ag-input:focus { border-color: #ffe600; }
+.ag-btn {
+   font-family: 'Press Start 2P', system-ui, sans-serif;
+   font-size: 9px;
+   color: #0b166b;
+   background: #ffe600;
+   border: 2px solid #000;
+   padding: 10px 14px;
+}
+.ag-btn:hover { filter: brightness(1.1); }
+
+/* Tabla de puntuaciones. */
+.ag-list { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 4px; }
+.ag-row {
+   display: grid;
+   grid-template-columns: 28px 1fr auto;
+   grid-template-areas: 'rank name pts' 'rank date date';
+   gap: 2px 8px;
+   align-items: center;
+   font-size: 8px;
+   padding: 6px 8px;
+   border: 2px solid #2252e3;
+   background: rgba(34, 82, 227, 0.18);
+}
+.ag-row.ag-mine { border-color: #ffe600; background: rgba(255, 230, 0, 0.15); }
+.ag-rank { grid-area: rank; color: #ffe600; font-size: 10px; }
+.ag-name { grid-area: name; color: #fbffbe; }
+.ag-pts { grid-area: pts; color: #99d397; }
+.ag-date { grid-area: date; color: #99d397; font-size: 7px; opacity: 0.8; }
