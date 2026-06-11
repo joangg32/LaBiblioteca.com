@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>El espejo: de la cámara a los cubos 3D</title>
+<style>
+  @page { margin: 2cm; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.55;
+    font-size: 13px;
+  }
+  h1 { font-size: 22px; border-bottom: 3px solid #e0a800; padding-bottom: 8px; }
+  h2 { font-size: 16px; color: #b88600; margin-top: 26px; }
+  code, pre {
+    font-family: "Consolas", "Courier New", monospace;
+    background: #f4f4f4;
+  }
+  code { padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  pre {
+    padding: 12px 14px;
+    border-radius: 6px;
+    border-left: 4px solid #e0a800;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .lineas { color: #b88600; font-weight: 600; }
+  blockquote {
+    margin: 0;
+    padding: 14px 18px;
+    background: #fff8e6;
+    border-left: 4px solid #e0a800;
+    border-radius: 6px;
+    font-size: 13.5px;
+  }
+  .comentario { color: #6a9955; }
+</style>
+</head>
+<body>
+
+<h1>El espejo "pin-art": de la cámara a los cubos 3D</h1>
+
+<p>El efecto del espejo captura la imagen de la webcam, la convierte en una rejilla de
+cuadrados de colores y hace que cada cubo se agrande o disminuya según el brillo del
+píxel. Este es el flujo completo, con las líneas del archivo
+<code>interactions/mirror.js</code>.</p>
+
+<h2>1. Captura la imagen y la reduce a 36×36 píxeles <span class="lineas">(líneas 137–142)</span></h2>
+<p>El vídeo de la webcam se dibuja (espejado) en un canvas diminuto del tamaño de la
+rejilla y se leen sus píxeles. Al comprimir la imagen a 36×36, cada píxel ya es
+directamente un cuadrado:</p>
+<pre>sctx.drawImage(video, 0, 0, COLS, ROWS); <span class="comentario">// mete toda la cámara en 36×36</span>
+const data = sctx.getImageData(0, 0, COLS, ROWS).data; <span class="comentario">// array plano de píxeles</span></pre>
+<p><code>data</code> es un array largo donde cada píxel ocupa 4 huecos:
+<code>[R,G,B,A, R,G,B,A, ...]</code>.</p>
+
+<h2>2. Lee el color de cada cuadrado <span class="lineas">(líneas 157–160)</span></h2>
+<pre>const idx = 4 * (gy * COLS + gx); <span class="comentario">// localiza el píxel de esta fila/columna</span>
+const r = data[idx];     <span class="comentario">// rojo</span>
+const g = data[idx + 1]; <span class="comentario">// verde</span>
+const b = data[idx + 2]; <span class="comentario">// azul</span></pre>
+
+<h2>3. Convierte el color en un número de brillo (luminancia) <span class="lineas">(líneas 164–165)</span></h2>
+<pre>let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255; <span class="comentario">// 0 = negro, 1 = blanco</span>
+lum = Math.pow(Math.min(1, lum * GAIN), GAMMA);      <span class="comentario">// aclara para webcam oscura</span></pre>
+<p>No usa el color tal cual para la altura: lo resume en <strong>brillo</strong>. Esos pesos
+(0.299 / 0.587 / 0.114) imitan cómo el ojo humano percibe la luz, más sensible al verde.</p>
+
+<h2>4. El brillo decide dos cosas a la vez</h2>
+<p><strong>El color del cubo</strong> &rarr; el tono equivalente de la paleta del sitio
+<span class="lineas">(línea 167)</span>:</p>
+<pre>const [pr, pg, pb] = paletteFromLuminance(lum);</pre>
+<p><strong>El tamaño/longitud del cubo</strong> &rarr; más brillo = más largo
+<span class="lineas">(línea 169)</span>:</p>
+<pre>const d = p.map(lum, 0, 1, 4, PIN_DEPTH); <span class="comentario">// oscuro → 4px, claro → 90px</span></pre>
+
+<h2>5. Dibuja el cubo en su sitio con esa longitud <span class="lineas">(líneas 176–180)</span></h2>
+<pre>p.translate(posx, posy, d / 2); <span class="comentario">// lo coloca y lo empuja hacia delante</span>
+p.fill(pr, pg, pb);             <span class="comentario">// color de la paleta</span>
+p.box(boxSize, boxSize, d);     <span class="comentario">// ancho fijo, alto fijo, PROFUNDIDAD = d</span></pre>
+
+<h2>En una frase</h2>
+<blockquote>
+La imagen de la cámara se comprime a una rejilla de 36×36 píxeles y se leen sus colores
+(<span class="lineas">líneas 140–160</span>); cada píxel se resume en un valor de brillo
+(<span class="lineas">líneas 164–165</span>) que decide tanto el color de paleta del cubo
+(<span class="lineas">línea 167</span>) como su longitud —claro se agranda, oscuro se
+encoge— mediante <code>p.map</code> (<span class="lineas">línea 169</span>), dibujándose
+finalmente como una caja 3D con <code>p.box</code> (<span class="lineas">línea 180</span>).
+</blockquote>
+
+</body>
+</html>
